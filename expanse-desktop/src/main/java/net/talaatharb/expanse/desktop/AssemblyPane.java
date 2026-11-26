@@ -8,7 +8,7 @@ import javafx.geometry.Orientation;
 import javafx.scene.AmbientLight;
 import javafx.scene.Group;
 import javafx.scene.Node;
-import javafx.scene.PerspectiveCamera;
+import javafx.scene.ParallelCamera;
 import javafx.scene.PointLight;
 import javafx.scene.SceneAntialiasing;
 import javafx.scene.SubScene;
@@ -31,6 +31,7 @@ import javafx.scene.shape.MeshView;
 import javafx.scene.shape.Shape3D;
 import javafx.scene.shape.TriangleMesh;
 import javafx.scene.transform.Rotate;
+import javafx.scene.transform.Scale;
 import javafx.scene.transform.Translate;
 import javafx.stage.FileChooser;
 import net.talaatharb.expanse.desktop.model.MeshData;
@@ -44,9 +45,15 @@ import net.talaatharb.expanse.dto.ApiModels.SolidView;
  * 3D assembly viewer using the camera rig of Oracle's JavaFX 3D sample application. Design coordinates (X right,
  * Y away, Z up, millimetres) map to JavaFX as {@code (x, y, z) -> (X, -Z, Y)}, a proper rotation, so a design
  * rotation of θ about Z becomes a JavaFX rotation of -θ about Y.
+ *
+ * <p>The view is orthographic: a {@link ParallelCamera} (pixel units, origin top-left, fixed depth range of
+ * ±max(width, height)/2) carries the orbit/pan rig. Zoom is a scale in pixels per millimetre applied on the camera,
+ * and view depth alone is compressed so the whole scene stays inside the clip volume at any zoom. Both only change
+ * the projection, so world-space lighting is unaffected.
  */
 final class AssemblyPane {
-    private static final double CAMERA_DISTANCE = 120;
+    private static final double MIN_SCALE = 0.05;
+    private static final double MAX_SCALE = 500;
     private static final double DEFAULT_RX = -55;
     private static final double DEFAULT_RY = 20;
     private final Workbench workbench;
@@ -60,7 +67,11 @@ final class AssemblyPane {
     private final Xform cameraXform = new Xform();
     private final Xform cameraXform2 = new Xform();
     private final Xform cameraXform3 = new Xform();
-    private final PerspectiveCamera camera = new PerspectiveCamera(true);
+    private final ParallelCamera camera = new ParallelCamera();
+    private final Scale cameraScale = new Scale(1, 1, 1);
+    private final Translate cameraCentre = new Translate();
+    /** Zoom in pixels per millimetre. */
+    private double scale = 5;
     private final SubScene subScene;
     private final CheckBox wireframe = new CheckBox("Wireframe");
     private final CheckBox showAxes = new CheckBox("Axes");
@@ -91,6 +102,8 @@ final class AssemblyPane {
         holder.setMinSize(200, 200);
         subScene.widthProperty().bind(holder.widthProperty());
         subScene.heightProperty().bind(holder.heightProperty());
+        subScene.widthProperty().addListener(o -> updateProjection());
+        subScene.heightProperty().addListener(o -> updateProjection());
         holder.setFocusTraversable(true);
         holder.setOnMousePressed(e -> {
             holder.requestFocus();
@@ -113,7 +126,10 @@ final class AssemblyPane {
         importModel.setTooltip(new Tooltip("Overlay an STL or OBJ model (millimetres, Z up) on the board"));
         importModel.setOnAction(e -> importModel());
         var clearModel = new Button("Clear model");
-        clearModel.setOnAction(e -> imported.getChildren().clear());
+        clearModel.setOnAction(e -> {
+            imported.getChildren().clear();
+            updateProjection();
+        });
         var refresh = new Button("Refresh");
         refresh.setOnAction(e -> refresh());
         var toolbar = new HBox(6, refresh, reset, top, wireframe, showAxes, new Separator(Orientation.VERTICAL),
@@ -188,31 +204,76 @@ final class AssemblyPane {
         cameraXform.getChildren().add(cameraXform2);
         cameraXform2.getChildren().add(cameraXform3);
         cameraXform3.getChildren().add(camera);
-        camera.setNearClip(0.1);
-        camera.setFarClip(10_000);
-        camera.setFieldOfView(35);
+        camera.getTransforms().setAll(cameraScale, cameraCentre);
         resetCamera();
     }
 
     private void resetCamera() {
-        camera.setTranslateZ(-CAMERA_DISTANCE);
         cameraXform.setRotate(DEFAULT_RX, DEFAULT_RY, 0);
         cameraXform2.setTranslate(0, 0, 0);
         cameraXform3.setRotate(0, 0, 0);
-        fitDistance();
+        fit();
     }
 
     private void topView() {
         cameraXform.setRotate(-90, 0, 0);
         cameraXform2.setTranslate(0, 0, 0);
-        fitDistance();
+        fit();
     }
 
-    private void fitDistance() {
-        if (assembly != null) {
-            double size = Math.max(assembly.boardWidthMm(), assembly.boardHeightMm());
-            camera.setTranslateZ(-Math.max(40, size * 2.2));
+    private void fit() {
+        double size = assembly == null ? 100 : Math.max(assembly.boardWidthMm(), assembly.boardHeightMm());
+        scale = fitScale(subScene == null ? 800 : subScene.getWidth(), subScene == null ? 600 : subScene.getHeight(),
+                size);
+        updateProjection();
+    }
+
+    /** Pixels per millimetre that show a board of {@code sizeMm} with a margin. */
+    static double fitScale(double width, double height, double sizeMm) {
+        double pixels = Math.max(100, Math.min(width, height));
+        return clamp(pixels / (1.4 * Math.max(10, sizeMm)), MIN_SCALE, MAX_SCALE);
+    }
+
+    /**
+     * Factor applied to view depth so a scene of {@code radiusMm} around the view centre fits the parallel camera's
+     * ±halfDepth clip range at {@code scale} pixels per millimetre.
+     */
+    static double depthCompression(double width, double height, double scale, double radiusMm) {
+        double halfDepth = Math.max(width, height) / 2;
+        return Math.min(1, 0.9 * halfDepth / (scale * Math.max(1, radiusMm)));
+    }
+
+    private void updateProjection() {
+        if (subScene == null) {
+            return;
         }
+        double width = Math.max(1, subScene.getWidth());
+        double height = Math.max(1, subScene.getHeight());
+        var pan = cameraXform2.t;
+        double radius = sceneRadius() + Math.sqrt(pan.getX() * pan.getX() + pan.getY() * pan.getY()
+                + pan.getZ() * pan.getZ());
+        double depth = depthCompression(width, height, scale, radius);
+        // camera space = Translate(w/2, h/2) * Scale(s, s, s*depth) * view; the camera holds the inverse
+        cameraScale.setX(1 / scale);
+        cameraScale.setY(1 / scale);
+        cameraScale.setZ(1 / (scale * depth));
+        cameraCentre.setX(-width / 2);
+        cameraCentre.setY(-height / 2);
+    }
+
+    private double sceneRadius() {
+        var bounds = world.getBoundsInParent();
+        if (bounds.isEmpty()) {
+            return 100;
+        }
+        double x = Math.max(Math.abs(bounds.getMinX()), Math.abs(bounds.getMaxX()));
+        double y = Math.max(Math.abs(bounds.getMinY()), Math.abs(bounds.getMaxY()));
+        double z = Math.max(Math.abs(bounds.getMinZ()), Math.abs(bounds.getMaxZ()));
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
+    private static double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private void buildAxes() {
@@ -245,7 +306,9 @@ final class AssemblyPane {
         findings.getItems().setAll(view.findings());
         applyDrawMode();
         if (firstRender) {
-            fitDistance();
+            fit();
+        } else {
+            updateProjection();
         }
         workbench.status("3D: " + view.solids().size() + " solids, max height "
                 + String.format(java.util.Locale.ROOT, "%.1f mm", view.maxHeightMm()));
@@ -297,9 +360,9 @@ final class AssemblyPane {
         mouseY = e.getSceneY();
         double modifier = e.isControlDown() ? 0.1 : 1;
         if (e.getButton() == MouseButton.MIDDLE || e.isShiftDown() && e.isPrimaryButtonDown()) {
-            double factor = Math.abs(camera.getTranslateZ()) / 600;
-            cameraXform2.t.setX(cameraXform2.t.getX() - dx * factor * modifier);
-            cameraXform2.t.setY(cameraXform2.t.getY() - dy * factor * modifier);
+            cameraXform2.t.setX(cameraXform2.t.getX() - dx / scale * modifier);
+            cameraXform2.t.setY(cameraXform2.t.getY() - dy / scale * modifier);
+            updateProjection();
         } else if (e.isPrimaryButtonDown()) {
             cameraXform.ry.setAngle(cameraXform.ry.getAngle() + dx * 0.3 * modifier);
             cameraXform.rx.setAngle(Math.max(-90, Math.min(90, cameraXform.rx.getAngle() - dy * 0.3 * modifier)));
@@ -312,9 +375,10 @@ final class AssemblyPane {
         zoom(e.getDeltaY() * 0.25);
     }
 
+    /** Positive amounts zoom in, by roughly {@code amount} percent. */
     private void zoom(double amount) {
-        double distance = camera.getTranslateZ() + amount * Math.abs(camera.getTranslateZ()) / 100;
-        camera.setTranslateZ(Math.max(-5_000, Math.min(-5, distance)));
+        scale = clamp(scale * Math.pow(1.01, amount), MIN_SCALE, MAX_SCALE);
+        updateProjection();
     }
 
     private void keyPressed(KeyEvent e) {
@@ -366,6 +430,7 @@ final class AssemblyPane {
             view.setUserData(file.getName());
             imported.getChildren().setAll(view);
             applyDrawMode();
+            updateProjection();
             workbench.status("Imported " + file.getName() + ": " + mesh.triangleCount() + " triangles");
         });
     }

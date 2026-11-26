@@ -115,6 +115,7 @@ public final class WorkbenchApplication extends Application implements Workbench
         root.setTop(menuBar());
         root.setBottom(statusBar);
         stage.setScene(new Scene(root, 1400, 900));
+        stage.setMaximized(true);
         stage.setOnCloseRequest(e -> {
             if (!confirmDiscard("closing")) {
                 e.consume();

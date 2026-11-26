@@ -57,6 +57,23 @@ class ProjectWorkflowTest {
     }
 
     @Test
+    void deletingAllTracesInOneChangeSetKeepsPlacementsAndRestoresAirwires() {
+        service.apply(project.id(), new ChangeSet(0, allPartsCircuit()));
+        var routed = service.get(project.id());
+        int airwiresBefore = service.analyzeBoard(project.id()).airwires().size();
+        List<Operation> deletes = routed.board().traces().stream()
+                .map(t -> (Operation) new DeleteTraceOp(t.id())).toList();
+
+        var applied = service.apply(project.id(), new ChangeSet(routed.revision(), deletes));
+
+        assertThat(applied.revision()).isEqualTo(routed.revision() + 1);
+        var cleared = service.get(project.id());
+        assertThat(cleared.board().traces()).isEmpty();
+        assertThat(cleared.board().placements()).hasSameSizeAs(routed.board().placements());
+        assertThat(service.analyzeBoard(project.id()).airwires()).hasSize(airwiresBefore + 2);
+    }
+
+    @Test
     void changeSetsPreviewWithoutPersistingAndApplyAsOneRevision() {
         var preview = service.preview(project.id(), new ChangeSet(0, allPartsCircuit()));
         assertThat(preview.applied()).isFalse();

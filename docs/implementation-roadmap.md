@@ -42,7 +42,7 @@ without changing that user-authored plan.
   symbols and timing diagram, MCP `simulation.run` with `analysis=logic`.
 - [x] PCB: sync, placement, two-layer orthogonal routing, ratsnest, DRC.
 - [x] 3D assembly: parametric bodies, collisions/overhang, JavaFX 3D viewer with
-  Oracle's camera rig; STL/OBJ overlay import behind a `ModelImporter` interface.
+  Oracle's camera rig and an orthographic ParallelCamera; STL/OBJ overlay import behind a `ModelImporter` interface.
 - [x] Desktop: tabbed schematic/simulation/PCB/3D editors; New/Open/Save/Save As
   with dirty tracking, conflict reload and file-vs-server choices on open.
 - [x] MCP: 27 annotated tools gated by `McpPolicy` (read, edit, destructive).

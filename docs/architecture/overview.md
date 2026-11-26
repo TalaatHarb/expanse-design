@@ -126,7 +126,7 @@ every part kind works end to end before selecting heavyweight engines:
   tree, outline/short/clearance/courtyard checks. No autorouter or fabrication
   output.
 - 3D: boxes and cylinders derived from footprint bodies; the desktop renders them
-  with JavaFX 3D (camera rig after Oracle's "Building a 3D Sample Application").
+  with JavaFX 3D (camera rig after Oracle's "Building a 3D Sample Application"), using an orthographic `ParallelCamera` with zoom and depth compression on the camera so nothing clips.
   STL/OBJ files can be overlaid in the viewer through a `ModelImporter` adapter;
   a third-party importer (e.g. InteractiveMesh) can be added behind that
   interface. STEP and true solid geometry remain R3 work.

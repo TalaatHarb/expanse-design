@@ -5,6 +5,27 @@ bridge that lets AI agents inspect and edit designs. The
 [product plan](project-plan.md) remains the long-term specification; this is an
 early but end-to-end slice.
 
+One switched RLC circuit followed through every view of the workbench:
+
+<table>
+  <tr>
+    <td width="50%"><a href="img/Schematic.PNG"><img src="img/Schematic.PNG" alt="Schematic editor with a switched RLC circuit, the parts palette and the property panel"></a></td>
+    <td width="50%"><a href="img/Simulation.PNG"><img src="img/Simulation.PNG" alt="Transient simulation plotting the capacitor charging curve with node voltages, pin currents and power"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Schematic</b>: place parts, wire pins, edit values, run ERC</td>
+    <td align="center"><b>Simulation</b>: DC operating point, transient and logic analyses</td>
+  </tr>
+  <tr>
+    <td width="50%"><a href="img/PCB.PNG"><img src="img/PCB.PNG" alt="PCB editor with placed footprints, routed top-layer traces and a clean design rule check"></a></td>
+    <td width="50%"><a href="img/Model3D.PNG"><img src="img/Model3D.PNG" alt="Orthographic 3D view of the assembled board with component bodies and traces"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><b>PCB</b>: sync footprints, route traces, DRC</td>
+    <td align="center"><b>3D</b>: assembled board with mechanical checks</td>
+  </tr>
+</table>
+
 Implemented for **resistors, capacitors, inductors, DC sources, power rails,
 ground, SPST switches, NPN/PNP BJTs, N/P-channel MOSFETs, logic gates/sources and
 sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every layer:
@@ -17,7 +38,7 @@ sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every layer:
   (0/1/X/Z) logic analysis produces timing diagrams.
 - **PCB**: board outline and rules, footprint sync/placement, two-layer
   orthogonal routing, ratsnest, shorts/clearance/outline DRC.
-- **3D**: parametric component bodies on the board (JavaFX 3D camera rig after
+- **3D**: parametric component bodies on the board (orthographic JavaFX 3D view with a camera rig after
   Oracle's sample application), collision/overhang checks, STL/OBJ overlay import.
 - **Persistence**: canonical JSON schema 0.2 (0.1 files migrate on open), H2 file
   or PostgreSQL storage, atomic file save with `.bak`, revision conflict detection.
@@ -103,7 +124,8 @@ Override the data directory with `EXPANSE_DATA_DIR` or desktop
   Logic shows a timing diagram (X shaded red, Z dashed) and final net levels.
 - **PCB**: *Sync from schematic* places footprints; drag parts, R rotates; click a
   pad then a pad on the same net to route on the chosen layer, or *Route all
-  airwires*. Select a trace and press Del to delete it. *Board...* edits size,
+  airwires*. Select a trace and press Del to delete it, or *Delete all traces*
+  (confirmed, one revision) to start routing over. *Board...* edits size,
   thickness and clearance. The DRC list highlights offending objects.
 - **3D**: drag to orbit, scroll/right-drag to zoom, middle or Shift-drag to pan;
   Z resets, T is top view, X toggles axes, W toggles wireframe. *Import model...*

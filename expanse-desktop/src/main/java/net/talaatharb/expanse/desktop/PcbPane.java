@@ -69,6 +69,9 @@ final class PcbPane {
         board.setOnAction(e -> editBoard());
         var deleteTrace = new Button("Delete trace");
         deleteTrace.setOnAction(e -> deleteSelectedTrace());
+        var deleteAllTraces = new Button("Delete all traces");
+        deleteAllTraces.setTooltip(new Tooltip("Remove every routed trace in one revision; placements are kept"));
+        deleteAllTraces.setOnAction(e -> deleteAllTraces());
         var rotate = new Button("Rotate part");
         rotate.setOnAction(e -> rotateSelected());
         var fit = new Button("Fit");
@@ -77,7 +80,7 @@ final class PcbPane {
             redraw();
         });
         var toolbar = new HBox(6, sync, routeAll, board, new Separator(Orientation.VERTICAL), new Label("Layer"), layer,
-                new Label("Width (mm)"), width, deleteTrace, rotate, fit);
+                new Label("Width (mm)"), width, deleteTrace, deleteAllTraces, rotate, fit);
         toolbar.setPadding(new Insets(4));
 
         var holder = new Pane(canvas);
@@ -409,6 +412,27 @@ final class PcbPane {
             selectedTrace = null;
             workbench.apply(List.of(new DeleteTraceOp(trace)));
         }
+    }
+
+    private void deleteAllTraces() {
+        if (project == null || project.board().traces().isEmpty()) {
+            workbench.status("No traces to delete");
+            return;
+        }
+        int count = project.board().traces().size();
+        var confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete all " + count
+                + " trace(s)? Footprint placements are kept.", ButtonType.YES, ButtonType.NO);
+        confirm.initOwner(canvas.getScene().getWindow());
+        if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) {
+            return;
+        }
+        selectedTrace = null;
+        workbench.apply(deleteAllTracesOperations(project.board()));
+        workbench.status("Deleted " + count + " trace(s)");
+    }
+
+    static List<Operation> deleteAllTracesOperations(BoardView board) {
+        return board.traces().stream().map(t -> (Operation) new DeleteTraceOp(t.id())).toList();
     }
 
     private void rotateSelected() {

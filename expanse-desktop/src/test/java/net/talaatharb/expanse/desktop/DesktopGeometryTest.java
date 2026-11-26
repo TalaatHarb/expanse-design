@@ -10,6 +10,21 @@ import net.talaatharb.expanse.dto.ApiModels.PinView;
 import org.junit.jupiter.api.Test;
 
 class DesktopGeometryTest {
+    @Test
+    void orthographicViewFitsTheBoardAndKeepsTheSceneInsideTheClipVolumeAtAnyZoom() {
+        double scale = AssemblyPane.fitScale(1400, 700, 80);
+        assertThat(80 * scale).as("board spans most of the shorter side").isBetween(400.0, 700.0);
+
+        for (double zoom : new double[] {scale, scale * 10, scale * 100}) {
+            double depth = AssemblyPane.depthCompression(1400, 700, zoom, 60);
+            assertThat(60 * zoom * depth).as("eye depth of the farthest point at zoom %s", zoom)
+                    .isLessThanOrEqualTo(1400 / 2.0);
+            assertThat(depth).isPositive().isLessThanOrEqualTo(1);
+        }
+        assertThat(AssemblyPane.depthCompression(1400, 700, 0.1, 60)).as("no compression when it already fits")
+                .isEqualTo(1);
+    }
+
     private static ComponentView component(String kind, int rotation, String... pins) {
         var pinViews = java.util.Arrays.stream(pins).map(n -> new PinView(UUID.randomUUID(), n, n, true)).toList();
         return new ComponentView(UUID.randomUUID(), UUID.randomUUID(), "X1", "d", "1", kind, kind, 10, 20, rotation,
