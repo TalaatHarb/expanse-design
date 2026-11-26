@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "0.1",
+  "id": "00000000-0000-0000-0000-000000000001",
+  "name": "Resistor loop - connectivity fixture, not a useful simulation",
+  "revision": 2,
+  "createdAt": "2026-10-17T00:00:00Z",
+  "modifiedAt": "2026-10-17T00:00:00Z",
+  "sheets": [{"id": "00000000-0000-0000-0000-000000000002", "name": "Main"}],
+  "components": [{
+    "id": "00000000-0000-0000-0000-000000000003",
+    "sheetId": "00000000-0000-0000-0000-000000000002",
+    "reference": "R1",
+    "definition": {
+      "id": "builtin.resistor", "version": "1.0", "name": "Resistor",
+      "pins": [{"number": "1", "name": "A", "required": true}, {"number": "2", "name": "B", "required": true}]
+    },
+    "position": {"x": 20, "y": 20, "unit": "mm"},
+    "pins": [
+      {"id": "00000000-0000-0000-0000-000000000004", "number": "1"},
+      {"id": "00000000-0000-0000-0000-000000000005", "number": "2"}
+    ]
+  }],
+  "nets": [{
+    "id": "00000000-0000-0000-0000-000000000006",
+    "name": "LOOP",
+    "pinIds": ["00000000-0000-0000-0000-000000000004", "00000000-0000-0000-0000-000000000005"]
+  }],
+  "extensions": {"fixture.purpose": "Identity, persistence and connectivity regression only"}
+}

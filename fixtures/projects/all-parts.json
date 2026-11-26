@@ -1,0 +1,990 @@
+{
+  "board" : {
+    "clearanceMm" : 0.2,
+    "heightMm" : 60.0,
+    "placements" : [ {
+      "componentId" : "349d1129-ec63-4cc7-8b92-e44584b35aaf",
+      "rotation" : 0,
+      "xMm" : 7.62,
+      "yMm" : 7.62
+    }, {
+      "componentId" : "300a8409-2a5f-46a7-9eb8-0faeea03974d",
+      "rotation" : 0,
+      "xMm" : 17.779999999999998,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "a6db1a6a-3b81-4445-9312-a5b51ce5828e",
+      "rotation" : 0,
+      "xMm" : 30.479999999999993,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "dd40e168-11a0-4de5-904f-d5e8753b4094",
+      "rotation" : 0,
+      "xMm" : 45.71999999999999,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "10bbd7f0-b45e-4266-9753-8ab3206fe45e",
+      "rotation" : 0,
+      "xMm" : 55.87999999999999,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "3852415e-1e25-4562-9832-9e01c838db3e",
+      "rotation" : 0,
+      "xMm" : 63.499999999999986,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "77fedf0a-4cb0-4d47-9019-e8ba1332e8ae",
+      "rotation" : 0,
+      "xMm" : 71.12,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "9a014c18-19b9-4101-8a32-9d8626224afd",
+      "rotation" : 0,
+      "xMm" : 30.479999999999993,
+      "yMm" : 10.16
+    }, {
+      "componentId" : "33fcf950-c490-4bcd-93a9-17acc50e8f63",
+      "rotation" : 0,
+      "xMm" : 40.63999999999999,
+      "yMm" : 10.16
+    }, {
+      "componentId" : "a7142222-1f43-4f04-bafb-c4cd5b4b2f80",
+      "rotation" : 0,
+      "xMm" : 48.25999999999999,
+      "yMm" : 10.16
+    } ],
+    "thicknessMm" : 1.6,
+    "traces" : [ {
+      "id" : "c32059ab-7aa8-460d-8d35-cd293eb9909e",
+      "layer" : "top",
+      "netId" : "28a175a0-5505-4062-a194-fd3e10fde151",
+      "points" : [ {
+        "xMm" : 50.79999999999999,
+        "yMm" : 5.08
+      }, {
+        "xMm" : 50.79999999999999,
+        "yMm" : 2.54
+      }, {
+        "xMm" : 57.14999999999999,
+        "yMm" : 2.54
+      }, {
+        "xMm" : 57.14999999999999,
+        "yMm" : 5.08
+      } ],
+      "widthMm" : 0.4
+    }, {
+      "id" : "269c7e75-e4be-4db4-8065-02c441857f7b",
+      "layer" : "bottom",
+      "netId" : "a5f48bee-3960-4e00-a447-fb17fb884f08",
+      "points" : [ {
+        "xMm" : 35.559999999999995,
+        "yMm" : 5.08
+      }, {
+        "xMm" : 35.559999999999995,
+        "yMm" : 1.27
+      }, {
+        "xMm" : 55.87999999999999,
+        "yMm" : 1.27
+      }, {
+        "xMm" : 55.87999999999999,
+        "yMm" : 5.08
+      } ],
+      "widthMm" : 0.4
+    } ],
+    "widthMm" : 80.0
+  },
+  "components" : [ {
+    "definition" : {
+      "body" : {
+        "color" : "#2e86de",
+        "depthMm" : 8.0,
+        "heightMm" : 10.0,
+        "shape" : "box",
+        "widthMm" : 10.2
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 9.0,
+        "courtyardWidthMm" : 11.0,
+        "name" : "TerminalBlock_2P_P5.08mm",
+        "pads" : [ {
+          "drillMm" : 1.1,
+          "heightMm" : 2.2,
+          "number" : "1",
+          "widthMm" : 2.2,
+          "xMm" : -2.54,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 1.1,
+          "heightMm" : 2.2,
+          "number" : "2",
+          "widthMm" : 2.2,
+          "xMm" : 2.54,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.dc-source",
+      "kind" : "voltage-source",
+      "name" : "DC voltage source",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "5",
+        "name" : "voltage",
+        "unit" : "V"
+      } ],
+      "pins" : [ {
+        "name" : "+",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "-",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "349d1129-ec63-4cc7-8b92-e44584b35aaf",
+    "pins" : [ {
+      "id" : "b74aef68-a582-46a7-81f7-a27e8daa3946",
+      "number" : "1"
+    }, {
+      "id" : "c9084cca-d2bf-46c0-a238-a87c31c4c8c9",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 10.0,
+      "y" : 10.0
+    },
+    "properties" : {
+      "voltage" : "9"
+    },
+    "reference" : "V1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#000000",
+        "depthMm" : 0.0,
+        "heightMm" : 0.0,
+        "shape" : "none",
+        "widthMm" : 0.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 0.0,
+        "courtyardWidthMm" : 0.0,
+        "name" : "virtual",
+        "pads" : [ ]
+      },
+      "id" : "builtin.power-rail",
+      "kind" : "power-rail",
+      "name" : "Power rail",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "5",
+        "name" : "voltage",
+        "unit" : "V"
+      } ],
+      "pins" : [ {
+        "name" : "VCC",
+        "number" : "1",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "58cfdb94-13e1-4f05-96d2-53f8719d2719",
+    "pins" : [ {
+      "id" : "378a64fd-afc9-453a-8e1b-1dfa2e491166",
+      "number" : "1"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 10.0,
+      "y" : 0.0
+    },
+    "properties" : {
+      "voltage" : "5"
+    },
+    "reference" : "VCC",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#000000",
+        "depthMm" : 0.0,
+        "heightMm" : 0.0,
+        "shape" : "none",
+        "widthMm" : 0.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 0.0,
+        "courtyardWidthMm" : 0.0,
+        "name" : "virtual",
+        "pads" : [ ]
+      },
+      "id" : "builtin.ground",
+      "kind" : "ground",
+      "name" : "Ground",
+      "parameters" : [ ],
+      "pins" : [ {
+        "name" : "GND",
+        "number" : "1",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "b78b17b3-ef89-4824-bf82-d0c358d8b040",
+    "pins" : [ {
+      "id" : "ac764529-c554-4758-8f89-2cb0bbcfa19c",
+      "number" : "1"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 10.0,
+      "y" : 40.0
+    },
+    "properties" : { },
+    "reference" : "GND1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#333333",
+        "depthMm" : 6.0,
+        "heightMm" : 5.0,
+        "shape" : "box",
+        "widthMm" : 6.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 7.0,
+        "courtyardWidthMm" : 8.0,
+        "name" : "SW_SPST_P5.00mm",
+        "pads" : [ {
+          "drillMm" : 1.0,
+          "heightMm" : 1.8,
+          "number" : "1",
+          "widthMm" : 1.8,
+          "xMm" : -2.5,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 1.0,
+          "heightMm" : 1.8,
+          "number" : "2",
+          "widthMm" : 1.8,
+          "xMm" : 2.5,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.switch-spst",
+      "kind" : "switch",
+      "name" : "Switch (SPST)",
+      "parameters" : [ {
+        "allowedValues" : [ "open", "closed" ],
+        "defaultValue" : "open",
+        "name" : "state",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "10m",
+        "name" : "onResistance",
+        "unit" : "ohm"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "300a8409-2a5f-46a7-9eb8-0faeea03974d",
+    "pins" : [ {
+      "id" : "5648406c-b9fd-483e-90ec-eb5c6c885bfd",
+      "number" : "1"
+    }, {
+      "id" : "9127b378-4c65-4e2b-860b-9441afec5af3",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 30.0,
+      "y" : 10.0
+    },
+    "properties" : {
+      "onResistance" : "10m",
+      "state" : "closed"
+    },
+    "reference" : "S1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#d2b48c",
+        "depthMm" : 2.5,
+        "heightMm" : 2.5,
+        "shape" : "axial",
+        "widthMm" : 6.3
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 3.5,
+        "courtyardWidthMm" : 12.56,
+        "name" : "R_Axial_P10.16mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -5.08,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 5.08,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.resistor",
+      "kind" : "resistor",
+      "name" : "Resistor",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "1k",
+        "name" : "resistance",
+        "unit" : "ohm"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "a6db1a6a-3b81-4445-9312-a5b51ce5828e",
+    "pins" : [ {
+      "id" : "0fabb286-8930-4351-8d43-6a9b3274e847",
+      "number" : "1"
+    }, {
+      "id" : "34fe4b9e-4fca-4206-b2e8-b44099876e92",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 50.0,
+      "y" : 10.0
+    },
+    "properties" : {
+      "resistance" : "220k"
+    },
+    "reference" : "RB",
+    "rotation" : 90,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#d2b48c",
+        "depthMm" : 2.5,
+        "heightMm" : 2.5,
+        "shape" : "axial",
+        "widthMm" : 6.3
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 3.5,
+        "courtyardWidthMm" : 12.56,
+        "name" : "R_Axial_P10.16mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -5.08,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 5.08,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.resistor",
+      "kind" : "resistor",
+      "name" : "Resistor",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "1k",
+        "name" : "resistance",
+        "unit" : "ohm"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "dd40e168-11a0-4de5-904f-d5e8753b4094",
+    "pins" : [ {
+      "id" : "6f19925e-2a86-4023-a345-dcfc01f9894a",
+      "number" : "1"
+    }, {
+      "id" : "73f3761f-14c0-4d8b-bef0-a99e25c31580",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 70.0,
+      "y" : 0.0
+    },
+    "properties" : {
+      "resistance" : "1k"
+    },
+    "reference" : "RC",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#222222",
+        "depthMm" : 3.8,
+        "heightMm" : 4.8,
+        "shape" : "box",
+        "widthMm" : 4.8
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 4.5,
+        "courtyardWidthMm" : 5.5,
+        "name" : "TO-92_Inline",
+        "pads" : [ {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "1",
+          "widthMm" : 1.05,
+          "xMm" : -1.27,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "2",
+          "widthMm" : 1.05,
+          "xMm" : 0.0,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "3",
+          "widthMm" : 1.05,
+          "xMm" : 1.27,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.npn",
+      "kind" : "npn",
+      "name" : "NPN transistor (TO-92)",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "100",
+        "name" : "beta",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "10f",
+        "name" : "saturationCurrent",
+        "unit" : "A"
+      } ],
+      "pins" : [ {
+        "name" : "E",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      }, {
+        "name" : "C",
+        "number" : "3",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "10bbd7f0-b45e-4266-9753-8ab3206fe45e",
+    "pins" : [ {
+      "id" : "4c879fc1-3f6f-458a-a8e7-976c20775566",
+      "number" : "1"
+    }, {
+      "id" : "e9c8aa1f-8b61-47ac-a197-7f1ee4777d3a",
+      "number" : "2"
+    }, {
+      "id" : "90ba39e6-25de-4ae3-87c2-b6a23e07f403",
+      "number" : "3"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 70.0,
+      "y" : 20.0
+    },
+    "properties" : {
+      "beta" : "100",
+      "saturationCurrent" : "10f"
+    },
+    "reference" : "Q1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#222222",
+        "depthMm" : 3.8,
+        "heightMm" : 4.8,
+        "shape" : "box",
+        "widthMm" : 4.8
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 4.5,
+        "courtyardWidthMm" : 5.5,
+        "name" : "TO-92_Inline",
+        "pads" : [ {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "1",
+          "widthMm" : 1.05,
+          "xMm" : -1.27,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "2",
+          "widthMm" : 1.05,
+          "xMm" : 0.0,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "3",
+          "widthMm" : 1.05,
+          "xMm" : 1.27,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.pnp",
+      "kind" : "pnp",
+      "name" : "PNP transistor (TO-92)",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "100",
+        "name" : "beta",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "10f",
+        "name" : "saturationCurrent",
+        "unit" : "A"
+      } ],
+      "pins" : [ {
+        "name" : "E",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      }, {
+        "name" : "C",
+        "number" : "3",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "3852415e-1e25-4562-9832-9e01c838db3e",
+    "pins" : [ {
+      "id" : "ad29ed56-05b4-4675-b04b-3ef1779769aa",
+      "number" : "1"
+    }, {
+      "id" : "fe99d69a-29c5-4ecb-8955-cd7d0b50b6f0",
+      "number" : "2"
+    }, {
+      "id" : "413c8abe-7880-480e-8264-f4e455a248a6",
+      "number" : "3"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 110.0,
+      "y" : 20.0
+    },
+    "properties" : {
+      "beta" : "100",
+      "saturationCurrent" : "10f"
+    },
+    "reference" : "Q2",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#1f3a93",
+        "depthMm" : 5.0,
+        "heightMm" : 11.0,
+        "shape" : "cylinder",
+        "widthMm" : 5.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 6.0,
+        "courtyardWidthMm" : 6.0,
+        "name" : "C_Radial_P2.50mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -1.25,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 1.25,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.capacitor",
+      "kind" : "capacitor",
+      "name" : "Capacitor",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "10u",
+        "name" : "capacitance",
+        "unit" : "F"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "77fedf0a-4cb0-4d47-9019-e8ba1332e8ae",
+    "pins" : [ {
+      "id" : "82431ca5-3279-4c31-b147-dc071875f5ac",
+      "number" : "1"
+    }, {
+      "id" : "a5b33539-9c32-4af7-905c-7ac120ca20eb",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 90.0,
+      "y" : 20.0
+    },
+    "properties" : {
+      "capacitance" : "100n"
+    },
+    "reference" : "C1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#3a7d44",
+        "depthMm" : 3.5,
+        "heightMm" : 3.5,
+        "shape" : "axial",
+        "widthMm" : 9.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 3.5,
+        "courtyardWidthMm" : 12.56,
+        "name" : "L_Axial_P10.16mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -5.08,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 5.08,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.inductor",
+      "kind" : "inductor",
+      "name" : "Inductor",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "1m",
+        "name" : "inductance",
+        "unit" : "H"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "9a014c18-19b9-4101-8a32-9d8626224afd",
+    "pins" : [ {
+      "id" : "bca5a9e5-ad11-467b-9328-0abb483fc9bc",
+      "number" : "1"
+    }, {
+      "id" : "b0ec2cd3-bf56-42e2-955b-0724ad68175b",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 90.0,
+      "y" : 40.0
+    },
+    "properties" : {
+      "inductance" : "10m"
+    },
+    "reference" : "L1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#222222",
+        "depthMm" : 3.8,
+        "heightMm" : 4.8,
+        "shape" : "box",
+        "widthMm" : 4.8
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 4.5,
+        "courtyardWidthMm" : 5.5,
+        "name" : "TO-92_Inline",
+        "pads" : [ {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "1",
+          "widthMm" : 1.05,
+          "xMm" : -1.27,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "2",
+          "widthMm" : 1.05,
+          "xMm" : 0.0,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "3",
+          "widthMm" : 1.05,
+          "xMm" : 1.27,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.nmos",
+      "kind" : "nmos",
+      "name" : "N-channel MOSFET (TO-92)",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "2",
+        "name" : "thresholdVoltage",
+        "unit" : "V"
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "100m",
+        "name" : "transconductance",
+        "unit" : "A/V^2"
+      } ],
+      "pins" : [ {
+        "name" : "S",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "G",
+        "number" : "2",
+        "required" : true
+      }, {
+        "name" : "D",
+        "number" : "3",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "33fcf950-c490-4bcd-93a9-17acc50e8f63",
+    "pins" : [ {
+      "id" : "b737d284-fbde-41de-9afe-e6fd05abe7d6",
+      "number" : "1"
+    }, {
+      "id" : "370bd9eb-9cfd-4a4d-b1c9-ceb94843f627",
+      "number" : "2"
+    }, {
+      "id" : "e5b374a6-d1fb-412e-82ce-f8a9696ff394",
+      "number" : "3"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 130.0,
+      "y" : 20.0
+    },
+    "properties" : {
+      "thresholdVoltage" : "2",
+      "transconductance" : "100m"
+    },
+    "reference" : "M1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#222222",
+        "depthMm" : 3.8,
+        "heightMm" : 4.8,
+        "shape" : "box",
+        "widthMm" : 4.8
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 4.5,
+        "courtyardWidthMm" : 5.5,
+        "name" : "TO-92_Inline",
+        "pads" : [ {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "1",
+          "widthMm" : 1.05,
+          "xMm" : -1.27,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "2",
+          "widthMm" : 1.05,
+          "xMm" : 0.0,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.6,
+          "heightMm" : 1.5,
+          "number" : "3",
+          "widthMm" : 1.05,
+          "xMm" : 1.27,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.pmos",
+      "kind" : "pmos",
+      "name" : "P-channel MOSFET (TO-92)",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "-2",
+        "name" : "thresholdVoltage",
+        "unit" : "V"
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "100m",
+        "name" : "transconductance",
+        "unit" : "A/V^2"
+      } ],
+      "pins" : [ {
+        "name" : "S",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "G",
+        "number" : "2",
+        "required" : true
+      }, {
+        "name" : "D",
+        "number" : "3",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "a7142222-1f43-4f04-bafb-c4cd5b4b2f80",
+    "pins" : [ {
+      "id" : "5f0b5659-0230-4569-b5b4-878a64a65d5c",
+      "number" : "1"
+    }, {
+      "id" : "fc03592c-a541-4626-b673-a26fefc36356",
+      "number" : "2"
+    }, {
+      "id" : "c9e595e8-3f8b-4cb3-97c8-e79fa1f466c5",
+      "number" : "3"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 150.0,
+      "y" : 20.0
+    },
+    "properties" : {
+      "thresholdVoltage" : "-2",
+      "transconductance" : "100m"
+    },
+    "reference" : "M2",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  } ],
+  "createdAt" : "2026-11-26T11:22:05.544671900Z",
+  "extensions" : { },
+  "id" : "84ef4b70-f319-4a4d-9d38-5bd0a9679a61",
+  "modifiedAt" : "2026-11-26T11:22:05.628800900Z",
+  "name" : "All parts - switched transistor stage",
+  "nets" : [ {
+    "id" : "f71239e6-e8ab-40ed-ae59-5ae912e528ff",
+    "name" : "VIN",
+    "pinIds" : [ "b74aef68-a582-46a7-81f7-a27e8daa3946", "5648406c-b9fd-483e-90ec-eb5c6c885bfd" ]
+  }, {
+    "id" : "5bc701e4-f6fa-40bd-9fae-69c1e390fcbd",
+    "name" : "SW",
+    "pinIds" : [ "9127b378-4c65-4e2b-860b-9441afec5af3", "0fabb286-8930-4351-8d43-6a9b3274e847" ]
+  }, {
+    "id" : "a5f48bee-3960-4e00-a447-fb17fb884f08",
+    "name" : "BASE",
+    "pinIds" : [ "e9c8aa1f-8b61-47ac-a197-7f1ee4777d3a", "34fe4b9e-4fca-4206-b2e8-b44099876e92" ]
+  }, {
+    "id" : "380f6c85-9b3f-4ff0-b3b2-1b3d1db55bbb",
+    "name" : "VCC",
+    "pinIds" : [ "ad29ed56-05b4-4675-b04b-3ef1779769aa", "378a64fd-afc9-453a-8e1b-1dfa2e491166", "5f0b5659-0230-4569-b5b4-878a64a65d5c", "6f19925e-2a86-4023-a345-dcfc01f9894a" ]
+  }, {
+    "id" : "28a175a0-5505-4062-a194-fd3e10fde151",
+    "name" : "OUT",
+    "pinIds" : [ "82431ca5-3279-4c31-b147-dc071875f5ac", "90ba39e6-25de-4ae3-87c2-b6a23e07f403", "fc03592c-a541-4626-b673-a26fefc36356", "fe99d69a-29c5-4ecb-8955-cd7d0b50b6f0", "370bd9eb-9cfd-4a4d-b1c9-ceb94843f627", "73f3761f-14c0-4d8b-bef0-a99e25c31580" ]
+  }, {
+    "id" : "4e186f22-84f3-4138-86b7-fc769319651a",
+    "name" : "LOAD",
+    "pinIds" : [ "bca5a9e5-ad11-467b-9328-0abb483fc9bc", "c9e595e8-3f8b-4cb3-97c8-e79fa1f466c5", "e5b374a6-d1fb-412e-82ce-f8a9696ff394", "413c8abe-7880-480e-8264-f4e455a248a6" ]
+  }, {
+    "id" : "467e66de-3485-429d-bca4-2ed9e425f0ae",
+    "name" : "GND",
+    "pinIds" : [ "a5b33539-9c32-4af7-905c-7ac120ca20eb", "ac764529-c554-4758-8f89-2cb0bbcfa19c", "b0ec2cd3-bf56-42e2-955b-0724ad68175b", "b737d284-fbde-41de-9afe-e6fd05abe7d6", "c9084cca-d2bf-46c0-a238-a87c31c4c8c9", "4c879fc1-3f6f-458a-a8e7-976c20775566" ]
+  } ],
+  "revision" : 1,
+  "schemaVersion" : "0.2",
+  "sheets" : [ {
+    "id" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02",
+    "name" : "Main"
+  } ]
+}

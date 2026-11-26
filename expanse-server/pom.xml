@@ -1,0 +1,17 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>net.talaatharb</groupId><artifactId>expanse-design</artifactId><version>0.1.0-SNAPSHOT</version></parent>
+    <artifactId>expanse-server</artifactId>
+    <dependencies>
+        <dependency><groupId>net.talaatharb</groupId><artifactId>expanse-api-web</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>net.talaatharb</groupId><artifactId>expanse-persistence</artifactId><version>${project.version}</version></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-security</artifactId></dependency>
+        <dependency><groupId>net.talaatharb</groupId><artifactId>expanse-connector</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>org.testcontainers</groupId><artifactId>postgresql</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>org.testcontainers</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins><plugin>
+        <groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId>
+    </plugin></plugins></build>
+</project>

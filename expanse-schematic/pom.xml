@@ -1,0 +1,6 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>net.talaatharb</groupId><artifactId>expanse-design</artifactId><version>0.1.0-SNAPSHOT</version></parent>
+    <artifactId>expanse-schematic</artifactId>
+    <dependencies><dependency><groupId>net.talaatharb</groupId><artifactId>expanse-domain</artifactId><version>${project.version}</version></dependency></dependencies>
+</project>

@@ -1,0 +1,136 @@
+name: Release
+
+# Publishes a GitHub release for tags such as v0.2.0 or v0.2.0-rc1 with:
+#   expanse-desktop-<version>-<os>.jar           client + embedded local server (JavaFX natives per OS)
+#   expanse-design-<version>-windows-portable.zip  jpackage app image with a bundled Java runtime
+#   expanse-server-<version>.jar                 headless server for remote/shared deployments
+#   expanse-mcp-<version>.jar                    MCP stdio bridge for AI agents
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  MAVEN_ARGS: --batch-mode --no-transfer-progress
+
+jobs:
+  server:
+    name: Verify and package headless server
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Derive version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Set project version
+        run: mvn org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion=${{ steps.version.outputs.version }} -DgenerateBackupPoms=false -DprocessAllModules=true
+      - name: Verify (all tests)
+        run: mvn clean verify -Dexpanse.source-revision=${{ github.sha }}
+      - name: Collect server and MCP jars
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp "expanse-server/target/expanse-server-$VERSION.jar" dist/
+          cp "expanse-mcp/target/expanse-mcp-$VERSION.jar" dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-server
+          path: dist/*
+          if-no-files-found: error
+
+  desktop:
+    name: Package desktop (${{ matrix.label }})
+    needs: server
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+          - os: windows-latest
+            label: windows
+          - os: macos-latest
+            label: macos
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: ${{ needs.server.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Set project version
+        shell: bash
+        run: mvn org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion=$VERSION -DgenerateBackupPoms=false -DprocessAllModules=true
+      - name: Build client + local-server jar
+        shell: bash
+        run: |
+          mvn -Pbundle-local-server -pl expanse-server,expanse-desktop -am -DskipTests -Dexpanse.source-revision=${{ github.sha }} package
+          mkdir -p dist
+          cp "expanse-desktop/target/expanse-desktop-$VERSION.jar" "dist/expanse-desktop-$VERSION-${{ matrix.label }}.jar"
+      - name: Build Windows portable zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./.github/scripts/package-windows-portable.ps1 -Version $env:VERSION `
+            -DesktopJar "expanse-desktop/target/expanse-desktop-$env:VERSION.jar" -OutputDirectory dist -SmokeTest
+          Remove-Item -Recurse -Force dist/windows-portable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [server, desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Expanse Design ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/*
+          body: |
+            **Desktop (client + local server)** - needs Java 21+:
+            `java -jar expanse-desktop-${{ needs.server.outputs.version }}-<linux|windows|macos>.jar`
+            The desktop starts its embedded server on 127.0.0.1:8765 and keeps data and a generated
+            local API token in `~/.expanse-design`.
+
+            **Windows portable** - no Java needed: unzip `expanse-design-${{ needs.server.outputs.version }}-windows-portable.zip`
+            and run `ExpanseDesign\ExpanseDesign.exe`.
+
+            **Headless server** - `EXPANSE_API_TOKEN=<32+ chars> java -jar expanse-server-${{ needs.server.outputs.version }}.jar`,
+            then connect desktops with `--expanse.mode=remote --expanse.server-url=...`.
+
+            **MCP bridge** - `java -jar expanse-mcp-${{ needs.server.outputs.version }}.jar` (see README).

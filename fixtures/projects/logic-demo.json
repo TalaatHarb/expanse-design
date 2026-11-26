@@ -1,0 +1,1149 @@
+{
+  "board" : {
+    "clearanceMm" : 0.2,
+    "heightMm" : 60.0,
+    "placements" : [ {
+      "componentId" : "41dcb306-9116-4ca9-979e-b862a4713536",
+      "rotation" : 0,
+      "xMm" : 7.62,
+      "yMm" : 12.7
+    }, {
+      "componentId" : "513304e8-0684-455e-a7a0-8c9d2ef8c4af",
+      "rotation" : 0,
+      "xMm" : 20.319999999999997,
+      "yMm" : 12.7
+    }, {
+      "componentId" : "7762a96e-12c8-456f-9fea-06e498c048d5",
+      "rotation" : 0,
+      "xMm" : 33.019999999999996,
+      "yMm" : 12.7
+    }, {
+      "componentId" : "48934352-4c7c-4f5a-9ca9-1028cc37be6b",
+      "rotation" : 0,
+      "xMm" : 43.17999999999999,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "9eaf1b0e-cc07-4abd-b2b9-b10e3d160394",
+      "rotation" : 0,
+      "xMm" : 53.33999999999999,
+      "yMm" : 5.08
+    }, {
+      "componentId" : "afa2c287-2211-4eb7-aee5-5ec8e804fb2d",
+      "rotation" : 0,
+      "xMm" : 66.03999999999999,
+      "yMm" : 5.08
+    } ],
+    "thicknessMm" : 1.6,
+    "traces" : [ ],
+    "widthMm" : 80.0
+  },
+  "components" : [ {
+    "definition" : {
+      "body" : {
+        "color" : "#000000",
+        "depthMm" : 0.0,
+        "heightMm" : 0.0,
+        "shape" : "none",
+        "widthMm" : 0.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 0.0,
+        "courtyardWidthMm" : 0.0,
+        "name" : "virtual",
+        "pads" : [ ]
+      },
+      "id" : "builtin.logic-clock",
+      "kind" : "logic-clock",
+      "name" : "Logic clock",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "1k",
+        "name" : "frequency",
+        "unit" : "Hz"
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "0.5",
+        "name" : "dutyCycle",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "5",
+        "name" : "highVoltage",
+        "unit" : "V"
+      } ],
+      "pins" : [ {
+        "name" : "CLK",
+        "number" : "1",
+        "required" : true
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "fc125af7-066d-4bec-8e77-e1e31b974468",
+    "pins" : [ {
+      "id" : "e6ffa4c7-331e-4fbd-aee9-027d144b6bf3",
+      "number" : "1"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : -38.1,
+      "y" : 0.0
+    },
+    "properties" : {
+      "dutyCycle" : "0.5",
+      "frequency" : "1k",
+      "highVoltage" : "5"
+    },
+    "reference" : "CK",
+    "rotation" : 0,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#1c1c1c",
+        "depthMm" : 19.0,
+        "heightMm" : 3.3,
+        "shape" : "box",
+        "widthMm" : 6.35
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 19.6,
+        "courtyardWidthMm" : 10.2,
+        "name" : "DIP-14_W7.62mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 5.08
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "3",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "4",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "5",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "6",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -5.079999999999999
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "7",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "8",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "9",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -5.08
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "10",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "11",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "12",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "13",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 5.079999999999999
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "14",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 7.62
+        } ]
+      },
+      "id" : "builtin.74hc74",
+      "kind" : "logic-74hc74",
+      "name" : "74HC74 dual D flip-flop",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "10n",
+        "name" : "propagationDelay",
+        "unit" : "s"
+      } ],
+      "pins" : [ {
+        "name" : "1CLR",
+        "number" : "1",
+        "required" : false
+      }, {
+        "name" : "1D",
+        "number" : "2",
+        "required" : false
+      }, {
+        "name" : "1CLK",
+        "number" : "3",
+        "required" : false
+      }, {
+        "name" : "1PRE",
+        "number" : "4",
+        "required" : false
+      }, {
+        "name" : "1Q",
+        "number" : "5",
+        "required" : false
+      }, {
+        "name" : "1QN",
+        "number" : "6",
+        "required" : false
+      }, {
+        "name" : "GND",
+        "number" : "7",
+        "required" : true
+      }, {
+        "name" : "2QN",
+        "number" : "8",
+        "required" : false
+      }, {
+        "name" : "2Q",
+        "number" : "9",
+        "required" : false
+      }, {
+        "name" : "2PRE",
+        "number" : "10",
+        "required" : false
+      }, {
+        "name" : "2CLK",
+        "number" : "11",
+        "required" : false
+      }, {
+        "name" : "2D",
+        "number" : "12",
+        "required" : false
+      }, {
+        "name" : "2CLR",
+        "number" : "13",
+        "required" : false
+      }, {
+        "name" : "VCC",
+        "number" : "14",
+        "required" : true
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "41dcb306-9116-4ca9-979e-b862a4713536",
+    "pins" : [ {
+      "id" : "e8e2f708-e376-4fe9-8d94-a25aa6976b5c",
+      "number" : "1"
+    }, {
+      "id" : "a186db46-088e-4a56-ad9b-e0cd5a6141b8",
+      "number" : "2"
+    }, {
+      "id" : "d166bf05-d75a-4c67-9932-24cbe4438164",
+      "number" : "3"
+    }, {
+      "id" : "7a7fd944-3dcc-40fd-bcc7-796ce0fc8814",
+      "number" : "4"
+    }, {
+      "id" : "26159b65-8160-422d-9c88-8b3ba475e288",
+      "number" : "5"
+    }, {
+      "id" : "d1d83b74-0896-4380-a418-49012fe5d002",
+      "number" : "6"
+    }, {
+      "id" : "1b44b395-5a81-43bd-8654-ec36af976def",
+      "number" : "7"
+    }, {
+      "id" : "bf83389e-5c8e-4870-b062-08e605412ba1",
+      "number" : "8"
+    }, {
+      "id" : "49d472fe-d17f-46a2-aa30-ef465ed84f5a",
+      "number" : "9"
+    }, {
+      "id" : "3db105cf-c7af-4ef9-8ffc-3b8671e8e6ab",
+      "number" : "10"
+    }, {
+      "id" : "7c325eae-f14f-4557-a4ee-cc9615eaf51c",
+      "number" : "11"
+    }, {
+      "id" : "7daec520-955f-4936-9136-0600571383c6",
+      "number" : "12"
+    }, {
+      "id" : "60816b59-f1f7-459a-868f-7777f19b0a4f",
+      "number" : "13"
+    }, {
+      "id" : "643bc87a-4590-4475-9fa1-c618cecebded",
+      "number" : "14"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : -12.7,
+      "y" : 0.0
+    },
+    "properties" : {
+      "propagationDelay" : "10n"
+    },
+    "reference" : "U1",
+    "rotation" : 0,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#1c1c1c",
+        "depthMm" : 19.0,
+        "heightMm" : 3.3,
+        "shape" : "box",
+        "widthMm" : 6.35
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 19.6,
+        "courtyardWidthMm" : 10.2,
+        "name" : "DIP-14_W7.62mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 5.08
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "3",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "4",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "5",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "6",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -5.079999999999999
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "7",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "8",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "9",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -5.08
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "10",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "11",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "12",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "13",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 5.079999999999999
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "14",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 7.62
+        } ]
+      },
+      "id" : "builtin.74hc86",
+      "kind" : "logic-74hc86",
+      "name" : "74HC86 quad 2-input XOR",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "10n",
+        "name" : "propagationDelay",
+        "unit" : "s"
+      } ],
+      "pins" : [ {
+        "name" : "1A",
+        "number" : "1",
+        "required" : false
+      }, {
+        "name" : "1B",
+        "number" : "2",
+        "required" : false
+      }, {
+        "name" : "1Y",
+        "number" : "3",
+        "required" : false
+      }, {
+        "name" : "2A",
+        "number" : "4",
+        "required" : false
+      }, {
+        "name" : "2B",
+        "number" : "5",
+        "required" : false
+      }, {
+        "name" : "2Y",
+        "number" : "6",
+        "required" : false
+      }, {
+        "name" : "GND",
+        "number" : "7",
+        "required" : true
+      }, {
+        "name" : "3Y",
+        "number" : "8",
+        "required" : false
+      }, {
+        "name" : "3A",
+        "number" : "9",
+        "required" : false
+      }, {
+        "name" : "3B",
+        "number" : "10",
+        "required" : false
+      }, {
+        "name" : "4Y",
+        "number" : "11",
+        "required" : false
+      }, {
+        "name" : "4A",
+        "number" : "12",
+        "required" : false
+      }, {
+        "name" : "4B",
+        "number" : "13",
+        "required" : false
+      }, {
+        "name" : "VCC",
+        "number" : "14",
+        "required" : true
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "513304e8-0684-455e-a7a0-8c9d2ef8c4af",
+    "pins" : [ {
+      "id" : "10e38c32-d3b2-4e00-9129-1305d82c8d31",
+      "number" : "1"
+    }, {
+      "id" : "10a42e56-7504-4d94-8cff-f3b38cd72d52",
+      "number" : "2"
+    }, {
+      "id" : "ed3d5ad9-59b7-4f40-8b0e-603039e5c618",
+      "number" : "3"
+    }, {
+      "id" : "1800c976-ebf8-45b4-aac5-6f81544f65d4",
+      "number" : "4"
+    }, {
+      "id" : "79508673-ab1e-4caf-a05c-3d4f691717b5",
+      "number" : "5"
+    }, {
+      "id" : "98e5752c-9959-42f2-9579-7b3770d3a630",
+      "number" : "6"
+    }, {
+      "id" : "7c454e1a-0f09-47d7-aa31-2aa363789e84",
+      "number" : "7"
+    }, {
+      "id" : "ac7cff3d-831e-40db-acec-2911e4b71a8f",
+      "number" : "8"
+    }, {
+      "id" : "ad8c0e07-ad04-490d-8c47-c293d0a42ffc",
+      "number" : "9"
+    }, {
+      "id" : "d87ec75d-45c9-4331-8081-fe7b7b7afc4b",
+      "number" : "10"
+    }, {
+      "id" : "a94c9cf0-8f86-4247-ae74-f9cbb8e76ad7",
+      "number" : "11"
+    }, {
+      "id" : "7ab6d72f-4dcf-4a12-9c43-1691f7d6c335",
+      "number" : "12"
+    }, {
+      "id" : "25d51675-46c6-459e-b8de-5936dde31f23",
+      "number" : "13"
+    }, {
+      "id" : "cffe287e-3301-44e3-ad29-8cf873d1a808",
+      "number" : "14"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 25.4,
+      "y" : -12.7
+    },
+    "properties" : {
+      "propagationDelay" : "10n"
+    },
+    "reference" : "U2",
+    "rotation" : 0,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#1c1c1c",
+        "depthMm" : 19.0,
+        "heightMm" : 3.3,
+        "shape" : "box",
+        "widthMm" : 6.35
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 19.6,
+        "courtyardWidthMm" : 10.2,
+        "name" : "DIP-14_W7.62mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 5.08
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "3",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "4",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "5",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "6",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -5.079999999999999
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "7",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "8",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -7.62
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "9",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -5.08
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "10",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "11",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "12",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 2.54
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "13",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 5.079999999999999
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "14",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 7.62
+        } ]
+      },
+      "id" : "builtin.74hc08",
+      "kind" : "logic-74hc08",
+      "name" : "74HC08 quad 2-input AND",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "10n",
+        "name" : "propagationDelay",
+        "unit" : "s"
+      } ],
+      "pins" : [ {
+        "name" : "1A",
+        "number" : "1",
+        "required" : false
+      }, {
+        "name" : "1B",
+        "number" : "2",
+        "required" : false
+      }, {
+        "name" : "1Y",
+        "number" : "3",
+        "required" : false
+      }, {
+        "name" : "2A",
+        "number" : "4",
+        "required" : false
+      }, {
+        "name" : "2B",
+        "number" : "5",
+        "required" : false
+      }, {
+        "name" : "2Y",
+        "number" : "6",
+        "required" : false
+      }, {
+        "name" : "GND",
+        "number" : "7",
+        "required" : true
+      }, {
+        "name" : "3Y",
+        "number" : "8",
+        "required" : false
+      }, {
+        "name" : "3A",
+        "number" : "9",
+        "required" : false
+      }, {
+        "name" : "3B",
+        "number" : "10",
+        "required" : false
+      }, {
+        "name" : "4Y",
+        "number" : "11",
+        "required" : false
+      }, {
+        "name" : "4A",
+        "number" : "12",
+        "required" : false
+      }, {
+        "name" : "4B",
+        "number" : "13",
+        "required" : false
+      }, {
+        "name" : "VCC",
+        "number" : "14",
+        "required" : true
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "7762a96e-12c8-456f-9fea-06e498c048d5",
+    "pins" : [ {
+      "id" : "5b18a26b-e009-4170-ae64-95594361de5e",
+      "number" : "1"
+    }, {
+      "id" : "3aefa85b-e80b-4324-af3e-cb3225f62ce0",
+      "number" : "2"
+    }, {
+      "id" : "79117cc4-14b3-42ef-8e62-f4335912d6fb",
+      "number" : "3"
+    }, {
+      "id" : "b711a23e-aca4-4b08-8ed6-1174a2abae9c",
+      "number" : "4"
+    }, {
+      "id" : "df6a6e3a-0f9d-4182-953e-41003333365a",
+      "number" : "5"
+    }, {
+      "id" : "f56446f3-cbc1-4986-8806-e0768df83a12",
+      "number" : "6"
+    }, {
+      "id" : "0dbcbf7a-2236-4233-8dcb-7cf92ed2d9a6",
+      "number" : "7"
+    }, {
+      "id" : "ca8aebc1-161f-4627-a3ff-0e32204395b6",
+      "number" : "8"
+    }, {
+      "id" : "75a27ddd-308c-432f-8f25-1629a1588df4",
+      "number" : "9"
+    }, {
+      "id" : "ca0ee21d-78ef-489e-9b79-5d5b9669fd8e",
+      "number" : "10"
+    }, {
+      "id" : "95150191-e1b5-4442-9170-b55fad512339",
+      "number" : "11"
+    }, {
+      "id" : "f5c5bb7f-e7b1-4441-a71e-22c0a68df507",
+      "number" : "12"
+    }, {
+      "id" : "74eff7fd-9bbd-4dc2-ad50-84593ae5a33e",
+      "number" : "13"
+    }, {
+      "id" : "528a1549-5f56-48b1-873b-374e7f6d2f0e",
+      "number" : "14"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 25.4,
+      "y" : 25.4
+    },
+    "properties" : {
+      "propagationDelay" : "10n"
+    },
+    "reference" : "U3",
+    "rotation" : 0,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#000000",
+        "depthMm" : 0.0,
+        "heightMm" : 0.0,
+        "shape" : "none",
+        "widthMm" : 0.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 0.0,
+        "courtyardWidthMm" : 0.0,
+        "name" : "virtual",
+        "pads" : [ ]
+      },
+      "id" : "builtin.power-rail",
+      "kind" : "power-rail",
+      "name" : "Power rail",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "5",
+        "name" : "voltage",
+        "unit" : "V"
+      } ],
+      "pins" : [ {
+        "name" : "VCC",
+        "number" : "1",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "b0c91909-89b9-4e17-b15b-3547340c2083",
+    "pins" : [ {
+      "id" : "cabcbfe2-588b-4ba8-a602-db5f31ea20ec",
+      "number" : "1"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : -12.7,
+      "y" : -25.4
+    },
+    "properties" : {
+      "voltage" : "5"
+    },
+    "reference" : "PWR",
+    "rotation" : 0,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#000000",
+        "depthMm" : 0.0,
+        "heightMm" : 0.0,
+        "shape" : "none",
+        "widthMm" : 0.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 0.0,
+        "courtyardWidthMm" : 0.0,
+        "name" : "virtual",
+        "pads" : [ ]
+      },
+      "id" : "builtin.ground",
+      "kind" : "ground",
+      "name" : "Ground",
+      "parameters" : [ ],
+      "pins" : [ {
+        "name" : "GND",
+        "number" : "1",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "ef002c9f-ccff-4629-bf5a-6e7954eee686",
+    "pins" : [ {
+      "id" : "689c952c-b70d-4897-820c-d4335c06b42a",
+      "number" : "1"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : -12.7,
+      "y" : 25.4
+    },
+    "properties" : { },
+    "reference" : "G1",
+    "rotation" : 0,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#1f3a93",
+        "depthMm" : 5.0,
+        "heightMm" : 11.0,
+        "shape" : "cylinder",
+        "widthMm" : 5.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 6.0,
+        "courtyardWidthMm" : 6.0,
+        "name" : "C_Radial_P2.50mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -1.25,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 1.25,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.capacitor",
+      "kind" : "capacitor",
+      "name" : "Capacitor",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "10u",
+        "name" : "capacitance",
+        "unit" : "F"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "48934352-4c7c-4f5a-9ca9-1028cc37be6b",
+    "pins" : [ {
+      "id" : "2a96fab9-0146-4109-a713-7674c4eaf6d3",
+      "number" : "1"
+    }, {
+      "id" : "3f007fd3-4c5b-47c0-8dbd-12e287809994",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : -38.1,
+      "y" : -20.32
+    },
+    "properties" : {
+      "capacitance" : "100n"
+    },
+    "reference" : "C1",
+    "rotation" : 90,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#d2b48c",
+        "depthMm" : 2.5,
+        "heightMm" : 2.5,
+        "shape" : "axial",
+        "widthMm" : 6.3
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 3.5,
+        "courtyardWidthMm" : 12.56,
+        "name" : "R_Axial_P10.16mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -5.08,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 5.08,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.resistor",
+      "kind" : "resistor",
+      "name" : "Resistor",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "1k",
+        "name" : "resistance",
+        "unit" : "ohm"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "9eaf1b0e-cc07-4abd-b2b9-b10e3d160394",
+    "pins" : [ {
+      "id" : "2831aa1a-55a5-432e-a406-46d3e6edd984",
+      "number" : "1"
+    }, {
+      "id" : "24e3cacf-f23b-4761-9ca1-d7f26b75e507",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 0.0,
+      "y" : 38.1
+    },
+    "properties" : {
+      "resistance" : "10k"
+    },
+    "reference" : "R1",
+    "rotation" : 90,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#333333",
+        "depthMm" : 6.0,
+        "heightMm" : 5.0,
+        "shape" : "box",
+        "widthMm" : 6.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 7.0,
+        "courtyardWidthMm" : 8.0,
+        "name" : "SW_SPST_P5.00mm",
+        "pads" : [ {
+          "drillMm" : 1.0,
+          "heightMm" : 1.8,
+          "number" : "1",
+          "widthMm" : 1.8,
+          "xMm" : -2.5,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 1.0,
+          "heightMm" : 1.8,
+          "number" : "2",
+          "widthMm" : 1.8,
+          "xMm" : 2.5,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.switch-spst",
+      "kind" : "switch",
+      "name" : "Switch (SPST)",
+      "parameters" : [ {
+        "allowedValues" : [ "open", "closed" ],
+        "defaultValue" : "open",
+        "name" : "state",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "10m",
+        "name" : "onResistance",
+        "unit" : "ohm"
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "B",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "2.0"
+    },
+    "id" : "afa2c287-2211-4eb7-aee5-5ec8e804fb2d",
+    "pins" : [ {
+      "id" : "54dac834-3149-476d-81cf-d2ae75b9d999",
+      "number" : "1"
+    }, {
+      "id" : "44c6cff5-316b-423e-9a05-3f0bdc950a61",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 0.0,
+      "y" : 50.8
+    },
+    "properties" : {
+      "onResistance" : "10m",
+      "state" : "open"
+    },
+    "reference" : "SW1",
+    "rotation" : 90,
+    "sheetId" : "70341673-194c-4f82-86a6-a9c1fdf388c4"
+  } ],
+  "createdAt" : "2026-11-26T12:15:12.010206200Z",
+  "extensions" : { },
+  "id" : "afb9588d-5f7d-41a6-8f3d-2a8f4feb1e1e",
+  "modifiedAt" : "2026-11-26T12:15:12.083331100Z",
+  "name" : "Logic demo",
+  "nets" : [ {
+    "id" : "952e694c-5754-4294-a68f-a3d33766184b",
+    "name" : "VCC",
+    "pinIds" : [ "cabcbfe2-588b-4ba8-a602-db5f31ea20ec", "cffe287e-3301-44e3-ad29-8cf873d1a808", "df6a6e3a-0f9d-4182-953e-41003333365a", "e8e2f708-e376-4fe9-8d94-a25aa6976b5c", "2831aa1a-55a5-432e-a406-46d3e6edd984", "2a96fab9-0146-4109-a713-7674c4eaf6d3", "528a1549-5f56-48b1-873b-374e7f6d2f0e", "643bc87a-4590-4475-9fa1-c618cecebded", "7a7fd944-3dcc-40fd-bcc7-796ce0fc8814" ]
+  }, {
+    "id" : "4d907164-5994-4a87-a713-06f3d0123237",
+    "name" : "GND",
+    "pinIds" : [ "0dbcbf7a-2236-4233-8dcb-7cf92ed2d9a6", "1b44b395-5a81-43bd-8654-ec36af976def", "3f007fd3-4c5b-47c0-8dbd-12e287809994", "44c6cff5-316b-423e-9a05-3f0bdc950a61", "689c952c-b70d-4897-820c-d4335c06b42a", "79508673-ab1e-4caf-a05c-3d4f691717b5", "7c454e1a-0f09-47d7-aa31-2aa363789e84" ]
+  }, {
+    "id" : "559457aa-c40d-453f-87a0-41d9de5d4b86",
+    "name" : "CLK",
+    "pinIds" : [ "d166bf05-d75a-4c67-9932-24cbe4438164", "e6ffa4c7-331e-4fbd-aee9-027d144b6bf3", "10e38c32-d3b2-4e00-9129-1305d82c8d31" ]
+  }, {
+    "id" : "8e56dd6c-7516-44a3-a167-cdaa5657c8e7",
+    "name" : "FB",
+    "pinIds" : [ "a186db46-088e-4a56-ad9b-e0cd5a6141b8", "d1d83b74-0896-4380-a418-49012fe5d002" ]
+  }, {
+    "id" : "ec5f9342-b49b-454d-9b6a-95f91dedb8af",
+    "name" : "Q",
+    "pinIds" : [ "10a42e56-7504-4d94-8cff-f3b38cd72d52", "26159b65-8160-422d-9c88-8b3ba475e288", "5b18a26b-e009-4170-ae64-95594361de5e" ]
+  }, {
+    "id" : "bc73320d-c7ed-40a1-ae1d-9800e2d6969f",
+    "name" : "EN",
+    "pinIds" : [ "24e3cacf-f23b-4761-9ca1-d7f26b75e507", "3aefa85b-e80b-4324-af3e-cb3225f62ce0", "54dac834-3149-476d-81cf-d2ae75b9d999" ]
+  }, {
+    "id" : "55d2fdce-1561-4a09-96fc-4c32dff44db1",
+    "name" : "XOR",
+    "pinIds" : [ "b711a23e-aca4-4b08-8ed6-1174a2abae9c", "ed3d5ad9-59b7-4f40-8b0e-603039e5c618" ]
+  }, {
+    "id" : "c13e3d9f-9359-421f-a06c-da17f265e2ff",
+    "name" : "GATED",
+    "pinIds" : [ "1800c976-ebf8-45b4-aac5-6f81544f65d4", "79117cc4-14b3-42ef-8e62-f4335912d6fb" ]
+  } ],
+  "revision" : 1,
+  "schemaVersion" : "0.2",
+  "sheets" : [ {
+    "id" : "70341673-194c-4f82-86a6-a9c1fdf388c4",
+    "name" : "Main"
+  } ]
+}

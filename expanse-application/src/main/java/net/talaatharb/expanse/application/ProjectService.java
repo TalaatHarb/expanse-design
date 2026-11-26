@@ -1,0 +1,304 @@
+package net.talaatharb.expanse.application;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.TreeMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import net.talaatharb.expanse.assembly.AssemblyBuilder;
+import net.talaatharb.expanse.domain.Design;
+import net.talaatharb.expanse.domain.Design.Project;
+import net.talaatharb.expanse.domain.DesignException;
+import net.talaatharb.expanse.dto.ApiModels.*;
+import net.talaatharb.expanse.library.ComponentLibrary;
+import net.talaatharb.expanse.pcb.BoardAnalyzer;
+import net.talaatharb.expanse.pcb.BoardEditor;
+import net.talaatharb.expanse.pcb.PcbGeometry;
+import net.talaatharb.expanse.schematic.SchematicEditor;
+import net.talaatharb.expanse.simulation.CircuitSimulator;
+import net.talaatharb.expanse.simulation.LogicSimulator;
+import net.talaatharb.expanse.validation.DesignValidator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public final class ProjectService {
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectService.class);
+    private final ProjectRepository repository;
+    private final ProjectJson json;
+    private final ComponentLibrary library;
+    private final DesignValidator validator;
+    private final ChangeEngine engine;
+    private final CircuitSimulator simulator = new CircuitSimulator();
+    private final LogicSimulator logicSimulator = new LogicSimulator();
+    private final BoardAnalyzer boardAnalyzer = new BoardAnalyzer();
+    private final AssemblyBuilder assemblyBuilder = new AssemblyBuilder();
+
+    public ProjectService(ProjectRepository repository, ProjectJson json, ComponentLibrary library,
+                          SchematicEditor editor, DesignValidator validator) {
+        this.repository = repository;
+        this.json = json;
+        this.library = library;
+        this.validator = validator;
+        this.engine = new ChangeEngine(library, editor, new BoardEditor());
+    }
+
+    public List<Summary> list(int offset, int limit) {
+        Design.require(offset >= 0 && limit > 0 && limit <= 100, "Use offset >= 0 and limit between 1 and 100");
+        return repository.list(offset, limit).stream().map(ProjectService::summary).toList();
+    }
+
+    public Snapshot create(CreateProject request) {
+        Project project = Project.create(request.name());
+        repository.insert(project);
+        LOG.info("action=project.create project={} revision=0 outcome=success", project.id());
+        return snapshot(project);
+    }
+
+    public Snapshot get(UUID id) {
+        return snapshot(repository.get(id));
+    }
+
+    public Snapshot place(UUID id, PlaceComponent request) {
+        return apply(id, new ChangeSet(request.expectedRevision(), List.of(new PlaceOp(request.definitionId(),
+                request.reference(), request.xMm(), request.yMm(), 0, Map.of(), request.sheetId())))).snapshot();
+    }
+
+    public Snapshot connect(UUID id, ConnectPins request) {
+        Design.require(request.pinIds() != null, "Select at least two pins");
+        return apply(id, new ChangeSet(request.expectedRevision(), List.of(new ConnectOp(request.name(),
+                request.pinIds().stream().map(UUID::toString).toList())))).snapshot();
+    }
+
+    /** Runs the change set in memory; nothing is persisted. */
+    public ChangeResult preview(UUID id, ChangeSet changes) {
+        Project current = repository.get(id);
+        checkRevision(current, changes.expectedRevision());
+        var outcome = engine.apply(current, changes.operations());
+        return result(current, outcome, false);
+    }
+
+    /** Applies every operation as one revision, or none of them. */
+    public ChangeResult apply(UUID id, ChangeSet changes) {
+        String action = "project.apply_changes";
+        try {
+            Project current = repository.get(id);
+            checkRevision(current, changes.expectedRevision());
+            var outcome = engine.apply(current, changes.operations());
+            repository.replace(outcome.project(), current.revision());
+            LOG.info("action={} project={} revision={} operations={} outcome=success", action, id,
+                    outcome.project().revision(), changes.operations().stream().map(ChangeEngine::name).toList());
+            return result(current, outcome, true);
+        } catch (DesignException e) {
+            LOG.warn("action={} project={} expectedRevision={} outcome=rejected code={}", action, id,
+                    changes.expectedRevision(), e.code());
+            throw e;
+        }
+    }
+
+    public ValidationReport validate(UUID id) {
+        Project project = repository.get(id);
+        return new ValidationReport(id, project.revision(), diagnostics(project));
+    }
+
+    public List<DefinitionView> search(String query) {
+        return library.search(query == null ? "" : query).stream().map(ProjectService::definition).toList();
+    }
+
+    public SimulationReport simulate(UUID id, SimulationRequest request) {
+        Project project = repository.get(id);
+        double stop = request.stopTimeS() == null ? 0 : request.stopTimeS();
+        var events = request.switchEvents() == null ? List.<CircuitSimulator.SwitchEvent>of()
+                : request.switchEvents().stream()
+                .map(e -> new CircuitSimulator.SwitchEvent(e.reference(), e.timeS(), e.state())).toList();
+        if ("logic".equals(request.analysis())) {
+            var logic = logicSimulator.simulate(project, stop, events);
+            LOG.info("action=simulation.run project={} revision={} analysis=logic outcome=success", id,
+                    project.revision());
+            Map<String, List<LogicTransitionView>> series = new LinkedHashMap<>();
+            logic.series().forEach((net, transitions) -> series.put(net, transitions.stream()
+                    .map(t -> new LogicTransitionView(t.timeS(), t.level())).toList()));
+            return new SimulationReport(id, project.revision(), "logic", logic.engine(), logic.models(), Map.of(),
+                    Map.of(), Map.of(), List.of(), Map.of(), Map.of(), logic.levels(), series, logic.warnings(),
+                    diagnostics(project));
+        }
+        var options = new CircuitSimulator.Options(request.analysis(), stop,
+                request.timeStepS() == null ? 0 : request.timeStepS(),
+                Boolean.TRUE.equals(request.zeroInitialConditions()), events);
+        var result = simulator.simulate(project, options);
+        LOG.info("action=simulation.run project={} revision={} analysis={} outcome=success", id,
+                project.revision(), result.analysis());
+        return new SimulationReport(id, project.revision(), result.analysis(), result.engine(), result.models(),
+                result.nodeVoltages(), result.pinCurrents(), result.componentPower(), result.time(),
+                result.voltageSeries(), result.currentSeries(), Map.of(), Map.of(), result.warnings(),
+                diagnostics(project));
+    }
+
+    public BoardAnalysis analyzeBoard(UUID id) {
+        Project project = repository.get(id);
+        var report = boardAnalyzer.analyze(project);
+        return new BoardAnalysis(id, project.revision(), report.pads().stream().map(ProjectService::pad).toList(),
+                report.airwires().stream().map(a -> new AirwireView(a.netId(), a.netName(), a.from().pinId(),
+                        a.from().reference() + "." + a.from().pinNumber(), a.from().xMm(), a.from().yMm(),
+                        a.to().pinId(), a.to().reference() + "." + a.to().pinNumber(), a.to().xMm(),
+                        a.to().yMm())).toList(),
+                report.findings().stream().map(f -> new Diagnostic(f.code(), f.severity(), f.message(),
+                        f.affectedIds())).toList());
+    }
+
+    public AssemblyView assembly(UUID id) {
+        Project project = repository.get(id);
+        var scene = assemblyBuilder.build(project);
+        return new AssemblyView(id, project.revision(), scene.boardWidthMm(), scene.boardHeightMm(),
+                scene.boardThicknessMm(), scene.maxHeightMm(), scene.solids().stream().map(s -> new SolidView(
+                s.id(), s.ownerId(), s.label(), s.role(), s.shape(), s.xMm(), s.yMm(), s.zMm(), s.sizeXMm(),
+                s.sizeYMm(), s.sizeZMm(), s.rotationDeg(), s.color())).toList(),
+                scene.findings().stream().map(f -> new Diagnostic(f.code(), f.severity(), f.message(),
+                        f.affectedIds())).toList());
+    }
+
+    public Document exportProject(UUID id) {
+        return new Document(json.write(repository.get(id)));
+    }
+
+    public Snapshot importProject(Document document) {
+        Project project = json.read(document.json());
+        repository.insert(project);
+        LOG.info("action=project.import project={} revision={} outcome=success", project.id(), project.revision());
+        return snapshot(project);
+    }
+
+    /** Imports a document under fresh identities, so it can coexist with the project it was copied from. */
+    public Snapshot importCopy(Document document) {
+        Project source = json.read(document.json());
+        String text = json.write(source);
+        for (UUID old : identities(source)) {
+            text = text.replace(old.toString(), UUID.randomUUID().toString());
+        }
+        Project copy = json.read(text);
+        Instant now = Instant.now();
+        copy = new Project(copy.schemaVersion(), copy.id(), copy.name(), 0, now, now, copy.sheets(),
+                copy.components(), copy.nets(), copy.board(), copy.extensions());
+        repository.insert(copy);
+        LOG.info("action=project.import_copy source={} project={} outcome=success", source.id(), copy.id());
+        return snapshot(copy);
+    }
+
+    /** Replaces the stored document (for example when reopening a saved file) as the next revision. */
+    public Snapshot replaceDocument(UUID id, ReplaceDocument request) {
+        Project current = repository.get(id);
+        checkRevision(current, request.expectedRevision());
+        Project incoming = json.read(request.json());
+        if (!incoming.id().equals(id)) {
+            throw new DesignException("INVALID_DOCUMENT", "The document belongs to a different project");
+        }
+        Project next = new Project(incoming.schemaVersion(), id, incoming.name(),
+                Math.incrementExact(current.revision()), incoming.createdAt(),
+                Instant.now().isBefore(incoming.createdAt()) ? incoming.createdAt() : Instant.now(),
+                incoming.sheets(), incoming.components(), incoming.nets(), incoming.board(), incoming.extensions());
+        repository.replace(next, current.revision());
+        LOG.info("action=project.replace_document project={} revision={} outcome=success", id, next.revision());
+        return snapshot(next);
+    }
+
+    public void delete(UUID id, long expectedRevision) {
+        repository.delete(id, expectedRevision);
+        LOG.info("action=project.delete project={} revision={} outcome=success", id, expectedRevision);
+    }
+
+    public List<Capability> capabilities() {
+        return List.of(
+                new Capability("project.lifecycle", true,
+                        "Revisioned projects, canonical JSON 0.2 import/export with 0.1 migration"),
+                new Capability("schematic.basic", true,
+                        "R, L, C, sources, rails, ground, switches, BJTs and MOSFETs with typed parameters"),
+                new Capability("design.validation", true, "Connectivity and electrical rule checks"),
+                new Capability("changes.transactional", true, "Preview and apply batched operations atomically"),
+                new Capability("simulation", true, CircuitSimulator.ENGINE + " " + CircuitSimulator.VERSION
+                        + ": DC operating point and transient (backward Euler), limited device models, "
+                        + "behavioural logic gates"),
+                new Capability("simulation.logic", true, LogicSimulator.ENGINE + " " + LogicSimulator.VERSION
+                        + ": event-driven 0/1/X/Z logic with propagation delays, clocks and switch events"),
+                new Capability("pcb", true, "Two-layer placement, orthogonal routing, ratsnest and basic DRC"),
+                new Capability("assembly3d", true, "Parametric bodies derived from the board; collision checks"),
+                new Capability("mcp.read", true, "Separate stdio MCP bridge using the same authenticated API"),
+                new Capability("mcp.mutate", true, "Preview/apply change sets; mutations configurable per bridge"));
+    }
+
+    private ChangeResult result(Project base, ChangeEngine.Outcome outcome, boolean applied) {
+        return new ChangeResult(base.id(), base.revision(), outcome.project().revision(), applied,
+                outcome.changes(), outcome.created(), diagnostics(outcome.project()), snapshot(outcome.project()));
+    }
+
+    private List<Diagnostic> diagnostics(Project project) {
+        return validator.validate(project).stream()
+                .map(f -> new Diagnostic(f.code(), f.severity(), f.message(), f.affectedIds())).toList();
+    }
+
+    private static void checkRevision(Project current, long expected) {
+        if (current.revision() != expected) {
+            throw new DesignException("REVISION_CONFLICT", "The project changed; refresh before editing",
+                    current.revision());
+        }
+    }
+
+    private static List<UUID> identities(Project p) {
+        List<UUID> ids = new ArrayList<>();
+        ids.add(p.id());
+        p.sheets().forEach(s -> ids.add(s.id()));
+        p.components().forEach(c -> {
+            ids.add(c.id());
+            c.pins().forEach(pin -> ids.add(pin.id()));
+        });
+        p.nets().forEach(n -> ids.add(n.id()));
+        p.board().traces().forEach(t -> ids.add(t.id()));
+        return ids;
+    }
+
+    private static Summary summary(Project project) {
+        return new Summary(project.id(), project.name(), project.revision(),
+                project.components().size(), project.nets().size());
+    }
+
+    private static ParameterView parameter(Design.ParameterDefinition p) {
+        return new ParameterView(p.name(), p.unit(), p.defaultValue(), p.allowedValues());
+    }
+
+    private static DefinitionView definition(Design.Definition d) {
+        return new DefinitionView(d.id(), d.version(), d.name(), d.kind(),
+                d.pins().stream().map(p -> new PinView(null, p.number(), p.name(), p.required())).toList(),
+                d.parameters().stream().map(ProjectService::parameter).toList(), true, d.footprint().physical(), true);
+    }
+
+    private static PadView pad(PcbGeometry.PlacedPad p) {
+        return new PadView(p.componentId(), p.reference(), p.pinId(), p.pinNumber(), p.netId(), p.xMm(), p.yMm(),
+                p.widthMm(), p.heightMm(), p.drillMm());
+    }
+
+    public static Snapshot snapshot(Project p) {
+        var board = p.board();
+        var placements = board.placements().stream().map(pl -> {
+            var c = p.component(pl.componentId());
+            return new PlacementView(pl.componentId(), c.reference(), pl.xMm(), pl.yMm(), pl.rotation(),
+                    c.definition().footprint().courtyardWidthMm(), c.definition().footprint().courtyardHeightMm());
+        }).toList();
+        var traces = board.traces().stream().map(t -> new TraceView(t.id(), t.netId(), t.layer(), t.widthMm(),
+                t.points().stream().map(pt -> new PointView(pt.xMm(), pt.yMm())).toList())).toList();
+        return new Snapshot(p.id(), p.name(), p.revision(),
+                p.sheets().stream().map(s -> new SheetView(s.id(), s.name())).toList(),
+                p.components().stream().map(c -> new ComponentView(c.id(), c.sheetId(), c.reference(),
+                        c.definition().id(), c.definition().version(), c.definition().name(), c.definition().kind(),
+                        c.position().x(), c.position().y(), c.rotation(), new TreeMap<>(c.properties()),
+                        c.definition().parameters().stream().map(ProjectService::parameter).toList(),
+                        c.definition().footprint().physical(),
+                        c.pins().stream().map(pin -> {
+                            var definition = c.definition().pins().stream()
+                                    .filter(d -> d.number().equals(pin.number())).findFirst().orElseThrow();
+                            return new PinView(pin.id(), pin.number(), definition.name(), definition.required());
+                        }).toList())).toList(),
+                p.nets().stream().map(n -> new NetView(n.id(), n.name(), n.pinIds())).toList(),
+                new BoardView(board.widthMm(), board.heightMm(), board.thicknessMm(), board.clearanceMm(),
+                        placements, traces, PcbGeometry.pads(p).stream().map(ProjectService::pad).toList()));
+    }
+}

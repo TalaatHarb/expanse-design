@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talaatharb.github.io/expanse-design/schemas/project/0.1.schema.json",
+  "title": "Expanse canonical project 0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "revision", "createdAt", "modifiedAt", "sheets", "components", "nets", "extensions"],
+  "properties": {
+    "schemaVersion": {"const": "0.1"},
+    "id": {"$ref": "#/$defs/id"},
+    "name": {"$ref": "#/$defs/text"},
+    "revision": {"type": "integer", "minimum": 0},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "modifiedAt": {"type": "string", "format": "date-time"},
+    "sheets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sheet"}},
+    "components": {"type": "array", "items": {"$ref": "#/$defs/component"}},
+    "nets": {"type": "array", "items": {"$ref": "#/$defs/net"}},
+    "extensions": {"type": "object", "additionalProperties": {"type": "string"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "format": "uuid"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S"},
+    "sheet": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "name": {"$ref": "#/$defs/text"}}
+    },
+    "position": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "unit"],
+      "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "unit": {"const": "mm"}}
+    },
+    "pinDefinition": {
+      "type": "object", "additionalProperties": false, "required": ["number", "name", "required"],
+      "properties": {
+        "number": {"$ref": "#/$defs/text"}, "name": {"$ref": "#/$defs/text"}, "required": {"type": "boolean"}
+      }
+    },
+    "definition": {
+      "type": "object", "additionalProperties": false, "required": ["id", "version", "name", "pins"],
+      "properties": {
+        "id": {"$ref": "#/$defs/text"}, "version": {"$ref": "#/$defs/text"}, "name": {"$ref": "#/$defs/text"},
+        "pins": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pinDefinition"}}
+      }
+    },
+    "pin": {
+      "type": "object", "additionalProperties": false, "required": ["id", "number"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "number": {"$ref": "#/$defs/text"}}
+    },
+    "component": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "sheetId", "reference", "definition", "position", "pins"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "sheetId": {"$ref": "#/$defs/id"},
+        "reference": {"$ref": "#/$defs/text"}, "definition": {"$ref": "#/$defs/definition"},
+        "position": {"$ref": "#/$defs/position"},
+        "pins": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pin"}}
+      }
+    },
+    "net": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name", "pinIds"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "name": {"$ref": "#/$defs/text"},
+        "pinIds": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}
+      }
+    }
+  }
+}
