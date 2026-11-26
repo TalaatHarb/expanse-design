@@ -38,7 +38,21 @@ Every `v*` tag publishes a [GitHub release](../../releases) containing:
 | `expanse-desktop-<version>-<linux\|windows\|macos>.jar` | Client with the embedded local server (Java 21+): `java -jar expanse-desktop-<version>-<os>.jar`. JavaFX natives are per OS. |
 | `expanse-server-<version>.jar` | Headless server for shared/remote use; requires `EXPANSE_API_TOKEN`. |
 | `expanse-mcp-<version>.jar` | MCP stdio bridge for AI agents (see [MCP](#mcp)). |
+| `ghcr.io/talaatharb/expanse-server:<version>` | Docker image of the headless server (linux/amd64, linux/arm64). |
 | `SHA256SUMS.txt` | Checksums. |
+
+Run the server image with a persistent volume (it listens on all interfaces
+inside the container; put TLS in front of it beyond a trusted network):
+
+```powershell
+docker run -d -p 8765:8765 -e EXPANSE_API_TOKEN=<32+ chars> -v expanse-data:/data `
+  ghcr.io/talaatharb/expanse-server:<version>
+```
+
+Add `-e SPRING_PROFILES_ACTIVE=postgres -e EXPANSE_DB_URL=... -e EXPANSE_DB_USER=...
+-e EXPANSE_DB_PASSWORD=...` to use PostgreSQL. Build locally from
+[`expanse-server/Dockerfile`](expanse-server/Dockerfile) with a context
+directory containing `expanse-server.jar`.
 
 ## Build and launch
 
@@ -207,13 +221,19 @@ PostgreSQL integration is opt-in locally and enabled in Linux/Java 21 CI
 - [`build.yml`](.github/workflows/build.yml) (push to `main`/`master`, pull
   requests, manual): `verify` on Windows/Linux × Java 21/25, then builds the
   bundled desktop and the Windows portable zip, launches it headlessly in capture
-  mode as a smoke test and uploads snapshot packages (7-day retention).
+  mode as a smoke test and uploads snapshot packages (7-day retention); also
+  builds the server Docker image and smoke-tests it (no push).
 - [`release.yml`](.github/workflows/release.yml) (tag `v*`, e.g.
   `git tag v0.2.0 && git push origin v0.2.0`): stamps the tag version into all
   POMs, runs the full verify, builds the headless server and MCP JARs once, the
-  client + local-server JAR on Linux/Windows/macOS, the Windows portable zip, and
-  publishes all assets with checksums. Tags containing `-` (e.g. `v0.2.0-rc1`)
-  are marked as pre-releases.
+  client + local-server JAR on Linux/Windows/macOS, the Windows portable zip,
+  builds the server Docker image from the verified jar, smoke-tests it and pushes
+  it to GHCR (multi-arch), then publishes all assets with checksums. Tags
+  containing `-` (e.g. `v0.2.0-rc1`) are marked as pre-releases and don't move
+  the `<major>.<minor>` image tag.
+- Every Maven invocation in CI runs a lifecycle phase (`verify`/`package`) in the
+  same run as goals that need sibling modules, such as `dependency:list`, because
+  the project's own artifacts are never installed to a repository.
 
 Packaged desktop JARs are OS-specific because they include JavaFX natives; do not
 copy a Windows desktop JAR to Linux. Signed native installers and automated GUI

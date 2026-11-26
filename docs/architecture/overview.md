@@ -150,7 +150,9 @@ tag `v*`) publish an OS-independent headless server JAR and MCP JAR, one desktop
 JAR per OS with the server JAR embedded as a resource (not a dependency, so the
 client classpath stays server-free and the enforcer rule still holds), and a
 Windows jpackage app image zip with a jlinked runtime that keeps `java.exe` for
-the local server child process. Before publishing
+the local server child process, plus a multi-arch GHCR image of the headless
+server built from the same verified jar (non-root, `/data` volume, binds
+`0.0.0.0` only inside the container). Before publishing
 installers, review the complete transitive inventory and ship required notices,
 licenses, and native-library obligations. Review engines independently before
 bundling. Signed native installers, a complete SBOM/license gate, and a macOS

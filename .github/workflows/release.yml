@@ -98,9 +98,69 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  docker:
+    name: Docker image (headless server)
+    needs: server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.server.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      # Reuse the verified jar from the server job instead of rebuilding in a separate Maven run.
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-server
+          path: docker-context
+      - name: Prepare build context
+        run: |
+          cp "docker-context/expanse-server-$VERSION.jar" docker-context/expanse-server.jar
+          rm docker-context/expanse-mcp-*.jar "docker-context/expanse-server-$VERSION.jar"
+          ls -l docker-context
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/expanse-server
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref_name, '-') }}
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-context
+          file: expanse-server/Dockerfile
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+          load: true
+          tags: expanse-server:smoke
+      - name: Smoke-test container
+        run: bash .github/scripts/smoke-test-server-image.sh expanse-server:smoke
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-context
+          file: expanse-server/Dockerfile
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
   publish:
     name: Publish GitHub release
-    needs: [server, desktop]
+    needs: [server, desktop, docker]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -134,3 +194,5 @@ jobs:
             then connect desktops with `--expanse.mode=remote --expanse.server-url=...`.
 
             **MCP bridge** - `java -jar expanse-mcp-${{ needs.server.outputs.version }}.jar` (see README).
+
+            **Docker** - `docker run -p 8765:8765 -e EXPANSE_API_TOKEN=<32+ chars> -v expanse-data:/data ghcr.io/talaatharb/expanse-server:${{ needs.server.outputs.version }}`

@@ -21,7 +21,8 @@ without changing that user-authored plan.
 - [x] Windows/Linux Java 21/25 CI definitions and opt-in PostgreSQL contract.
 - [x] Release workflow on `v*` tags: headless server and MCP JARs, per-OS
   client + embedded local-server JARs (`bundle-local-server` profile), a
-  jpackage Windows portable zip smoke-tested in capture mode, and checksums.
+  jpackage Windows portable zip smoke-tested in capture mode, a smoke-tested
+  multi-arch server Docker image on GHCR, and checksums.
 - [x] Zero-configuration local runtime: generated owner token in the data
   directory and embedded server extraction, both covered by `LocalServerTest`.
 
