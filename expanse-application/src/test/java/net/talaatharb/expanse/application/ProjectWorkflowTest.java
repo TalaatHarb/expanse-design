@@ -57,6 +57,150 @@ class ProjectWorkflowTest {
     }
 
     @Test
+    void undoAndRedoRestoreEarlierContentAsNewRevisionsAndNewEditsClearRedo() {
+        UUID id = project.id();
+        assertThat(service.history(id).canUndo()).isFalse();
+        service.apply(id, new ChangeSet(0, List.of(new PlaceOp("builtin.resistor", "R1", 0, 0, 0, null, null))));
+        service.apply(id, new ChangeSet(1, List.of(new PlaceOp("builtin.resistor", "R2", 10, 0, 0, null, null))));
+        assertThat(service.history(id)).isEqualTo(new HistoryView(id, 2, true, false, 1L, null));
+
+        var undone = service.undo(id, new HistoryStep(2));
+        assertThat(undone.revision()).isEqualTo(3);
+        assertThat(references(undone.snapshot())).containsExactly("R1");
+        assertThat(references(service.undo(id, new HistoryStep(3)).snapshot())).isEmpty();
+        assertThat(service.history(id)).isEqualTo(new HistoryView(id, 4, false, true, null, 3L));
+        assertThatThrownBy(() -> service.undo(id, new HistoryStep(4))).isInstanceOfSatisfying(DesignException.class,
+                e -> assertThat(e.code()).isEqualTo("NOTHING_TO_UNDO"));
+        assertThatThrownBy(() -> service.redo(id, new HistoryStep(3))).isInstanceOfSatisfying(DesignException.class,
+                e -> assertThat(e.code()).isEqualTo("REVISION_CONFLICT"));
+
+        assertThat(references(service.redo(id, new HistoryStep(4)).snapshot())).containsExactly("R1");
+        assertThat(references(service.redo(id, new HistoryStep(5)).snapshot())).containsExactly("R1", "R2");
+        assertThat(service.history(id).canRedo()).isFalse();
+        assertThat(references(service.undo(id, new HistoryStep(6)).snapshot())).containsExactly("R1");
+
+        service.apply(id, new ChangeSet(7, List.of(new PlaceOp("builtin.capacitor", "C1", 0, 20, 0, null, null))));
+        assertThat(service.history(id)).isEqualTo(new HistoryView(id, 8, true, false, 7L, null));
+        assertThat(references(service.undo(id, new HistoryStep(8)).snapshot())).containsExactly("R1");
+        assertThat(references(service.undo(id, new HistoryStep(9)).snapshot())).isEmpty();
+        assertThatThrownBy(() -> service.redo(id, new HistoryStep(9))).isInstanceOfSatisfying(DesignException.class,
+                e -> assertThat(e.code()).isEqualTo("REVISION_CONFLICT"));
+        assertThat(service.history(id).redoRevision()).isEqualTo(9L);
+    }
+
+    private static List<String> references(Snapshot snapshot) {
+        return snapshot.components().stream().map(ComponentView::reference).toList();
+    }
+
+    private static NetView netOf(Snapshot snapshot, String reference, String pin) {
+        UUID pinId = snapshot.components().stream().filter(c -> c.reference().equals(reference))
+                .flatMap(c -> c.pins().stream()).filter(p -> p.number().equals(pin) || p.name().equals(pin)).findFirst()
+                .orElseThrow().id();
+        return snapshot.nets().stream().filter(n -> n.pinIds().contains(pinId)).findFirst().orElse(null);
+    }
+
+    @Test
+    void wiresConnectPinsCarryBendsAndTeesFollowNetMergesAndAreCleanedUp() {
+        UUID id = project.id();
+        service.apply(id, new ChangeSet(0, List.of(
+                new PlaceOp("builtin.resistor", "R1", 0, 0, 0, null, null),
+                new PlaceOp("builtin.resistor", "R2", 20, 0, 0, null, null),
+                new PlaceOp("builtin.resistor", "R3", 20, 20, 0, null, null),
+                new PlaceOp("builtin.resistor", "R4", 40, 20, 0, null, null),
+                new PlaceOp("builtin.resistor", "R5", 60, 20, 0, null, null),
+                new DrawWireOp("R1.2", "R2.1", null, List.of(new PointView(10, 0)), "MID"),
+                new DrawWireOp(null, "R3.1", "MID", List.of(new PointView(10, 0), new PointView(10, 20)), null),
+                new DrawWireOp("R4.2", "R5.1", null, List.of(), null))));
+        var wired = service.get(id);
+        NetView mid = netOf(wired, "R1", "2");
+        assertThat(mid.name()).isEqualTo("MID");
+        assertThat(mid.pinIds()).hasSize(3);
+        assertThat(mid.wires()).hasSize(2);
+        assertThat(mid.wires().get(1).fromPinId()).as("a tee starts at a free point").isNull();
+        assertThat(mid.wires().get(1).points()).containsExactly(new PointView(10, 0), new PointView(10, 20));
+        assertThat(netOf(wired, "R4", "2").wires()).singleElement()
+                .satisfies(w -> assertThat(w.points()).isEmpty());
+
+        assertThatThrownBy(() -> service.apply(id, new ChangeSet(1, List.of(
+                new DrawWireOp("R1.1", null, null, List.of(new PointView(-10, 0)), null)))))
+                .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("PIN_NOT_CONNECTED"));
+        assertThat(json.read(service.exportProject(id).json())).isEqualTo(repository.get(id));
+
+        service.apply(id, new ChangeSet(1, List.of(new ConnectOp(null, List.of("R4.2", "R2.1")))));
+        var merged = service.get(id);
+        assertThat(netOf(merged, "R5", "1").wires()).as("wires move with merged nets").hasSize(3);
+
+        service.apply(id, new ChangeSet(2, List.of(new DisconnectOp("R3.1"))));
+        assertThat(netOf(service.get(id), "R1", "2").wires()).as("wires to a removed pin go with it").hasSize(2);
+        UUID first = netOf(service.get(id), "R1", "2").wires().getFirst().id();
+        var deleted = service.apply(id, new ChangeSet(3, List.of(new DeleteWireOp(first))));
+        assertThat(netOf(deleted.snapshot(), "R1", "2").pinIds()).as("deleting graphics keeps connectivity")
+                .hasSize(4);
+        service.apply(id, new ChangeSet(4, List.of(new DeleteComponentOp("R5"))));
+        assertThat(netOf(service.get(id), "R1", "2").wires()).isEmpty();
+        assertThat(netOf(service.undo(id, new HistoryStep(5)).snapshot(), "R1", "2").wires()).hasSize(1);
+    }
+
+    @Test
+    void customPartsArePlacedSimulatedRedefinedSavedAndDeleted() {
+        UUID id = project.id();
+        var pins = List.of(new PinSpec("1", "VCC", true), new PinSpec("2", "OUT", true), new PinSpec("3", "GND", true));
+        var pads = List.of(new PadSpec("1", -2.54, 0, 1.6, 1.6, 0.8), new PadSpec("2", 0, 0, 1.6, 1.6, 0.8),
+                new PadSpec("3", 2.54, 0, 1.6, 1.6, 0.8));
+        var sensor = new PartSpec("sensor", null, "Sensor", null, pins, null, null, pads, 8, 4, null);
+        var defined = service.apply(id, new ChangeSet(0, List.of(new DefinePartOp(sensor),
+                new PlaceOp("project.sensor", "U1", 40, 0, 0, null, null),
+                new PlaceOp("builtin.dc-source", "V1", 0, 0, 0, Map.of("voltage", "9"), null),
+                new PlaceOp("builtin.ground", "GND1", 0, 20, 0, null, null),
+                new PlaceOp("builtin.resistor", "R1", 20, 0, 0, null, null),
+                new ConnectOp("VIN", List.of("V1.+", "R1.1")),
+                new ConnectOp("OUT", List.of("R1.2", "U1.OUT")),
+                new ConnectOp("GND", List.of("V1.-", "GND1.GND", "U1.GND")),
+                new SyncBoardOp())));
+        assertThat(defined.snapshot().parts()).singleElement().satisfies(p -> {
+            assertThat(p.id()).isEqualTo("project.sensor");
+            assertThat(p.kind()).isEqualTo(Design.GENERIC_KIND);
+            assertThat(p.body().shape()).isEqualTo("box");
+        });
+        assertThat(defined.snapshot().board().placements()).extracting(PlacementView::reference).contains("U1");
+        var simulation = service.simulate(id, new SimulationRequest("op", null, null, null, null));
+        assertThat(simulation.nodeVoltages().get("OUT")).isCloseTo(9, within(1e-3));
+        assertThat(simulation.warnings()).anyMatch(w -> w.contains("U1") && w.contains("custom part"));
+        assertThat(json.read(service.exportProject(id).json())).isEqualTo(repository.get(id));
+
+        UUID vccPin = defined.snapshot().components().stream().filter(c -> c.reference().equals("U1")).findFirst()
+                .orElseThrow().pins().getFirst().id();
+        var schematicOnly = new PartSpec("project.sensor", "2", "Sensor", null, List.of(pins.get(0), pins.get(1),
+                new PinSpec("4", "EN", false)), null, null, null, 0, 0, null);
+        var redefined = service.apply(id, new ChangeSet(1, List.of(new DefinePartOp(schematicOnly)))).snapshot();
+        var u1 = redefined.components().stream().filter(c -> c.reference().equals("U1")).findFirst().orElseThrow();
+        assertThat(u1.pins()).extracting(PinView::number).containsExactly("1", "2", "4");
+        assertThat(u1.pins().getFirst().id()).as("pin identity is kept by number").isEqualTo(vccPin);
+        assertThat(u1.definitionVersion()).isEqualTo("2");
+        assertThat(netOf(redefined, "GND1", "GND").pinIds()).hasSize(2);
+        assertThat(redefined.board().placements()).extracting(PlacementView::reference).doesNotContain("U1");
+
+        assertThatThrownBy(() -> service.apply(id, new ChangeSet(2, List.of(new DeletePartOp("sensor")))))
+                .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("PART_IN_USE"));
+        var removed = service.apply(id, new ChangeSet(2, List.of(new DeleteComponentOp("U1"),
+                new DeletePartOp("sensor"))));
+        assertThat(removed.snapshot().parts()).isEmpty();
+
+        var badResistor = new PartSpec("my-r", null, "My R", "resistor", List.of(new PinSpec("1", "A", true),
+                new PinSpec("2", "B", true)), List.of(), null, null, 0, 0, null);
+        assertThatThrownBy(() -> service.apply(id, new ChangeSet(3, List.of(new DefinePartOp(badResistor)))))
+                .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.getMessage()).contains("resistance"));
+        var resistance = new ComponentLibrary().get("builtin.resistor").parameters().getFirst();
+        var goodResistor = new PartSpec("my-r", null, "My R", "resistor", badResistor.pins(),
+                List.of(new ParameterView(resistance.name(), resistance.unit(), "47k", List.of())), null, null, 0, 0,
+                null);
+        var placed = service.apply(id, new ChangeSet(3, List.of(new DefinePartOp(goodResistor),
+                new PlaceOp("project.my-r", "R9", 0, 40, 0, null, null))));
+        assertThat(placed.snapshot().components()).anyMatch(c -> c.reference().equals("R9")
+                && c.kind().equals("resistor") && c.properties().get("resistance").equals("47k"));
+    }
+
+    @Test
     void deletingAllTracesInOneChangeSetKeepsPlacementsAndRestoresAirwires() {
         service.apply(project.id(), new ChangeSet(0, allPartsCircuit()));
         var routed = service.get(project.id());
@@ -89,7 +233,7 @@ class ProjectWorkflowTest {
         var snapshot = service.get(project.id());
         assertThat(snapshot.revision()).isEqualTo(1);
         assertThat(snapshot.components()).extracting(ComponentView::kind)
-                .containsExactlyInAnyOrderElementsOf(Design.KINDS.stream().filter(k -> !k.startsWith("logic-"))
+                .containsExactlyInAnyOrderElementsOf(Design.KINDS.stream().filter(k -> !k.startsWith("logic-") && !k.equals(Design.GENERIC_KIND))
                         .flatMap(k -> k.equals("resistor") ? java.util.stream.Stream.of(k, k) : java.util.stream.Stream.of(k))
                         .toList());
         assertThat(snapshot.board().placements()).hasSize(10);
@@ -160,7 +304,7 @@ class ProjectWorkflowTest {
         Project reopened = json.read(saved);
         assertThat(reopened).isEqualTo(repository.get(project.id()));
         assertThat(json.write(reopened)).isEqualTo(saved);
-        assertThat(reopened.schemaVersion()).isEqualTo("0.2");
+        assertThat(reopened.schemaVersion()).isEqualTo("0.3");
 
         assertThatThrownBy(() -> service.importProject(new Document(saved)))
                 .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("PROJECT_EXISTS"));
@@ -182,7 +326,7 @@ class ProjectWorkflowTest {
         Project original = repository.get(project.id());
         Project extended = new Project(original.schemaVersion(), original.id(), original.name(), 0,
                 original.createdAt(), original.modifiedAt(), original.sheets(), original.components(),
-                original.nets(), original.board(), Map.of("vendor.note", "{\"opaque\":\"value\"}"));
+                original.nets(), original.board(), original.parts(), Map.of("vendor.note", "{\"opaque\":\"value\"}"));
         assertThat(json.read(json.write(extended))).isEqualTo(extended);
 
         service.delete(copy.id(), 0);
@@ -209,7 +353,7 @@ class ProjectWorkflowTest {
     @Test
     void importRejectsUnsupportedUnknownMissingAndMalformedDataWithoutOverwriting() {
         String original = service.exportProject(project.id()).json();
-        assertThatThrownBy(() -> json.read(original.replace("\"0.2\"", "\"99.0\"")))
+        assertThatThrownBy(() -> json.read(original.replace("\"0.3\"", "\"99.0\"")))
                 .isInstanceOfSatisfying(DesignException.class,
                         e -> assertThat(e.code()).isEqualTo("UNSUPPORTED_SCHEMA"));
         assertThatThrownBy(() -> json.read(original.replaceFirst("\\{", "{\"unknown\":true,")))
@@ -236,6 +380,7 @@ class ProjectWorkflowTest {
 
     static final class MemoryRepository implements ProjectRepository {
         private final Map<UUID, Project> projects = new HashMap<>();
+        private final Map<String, StoredRevision> revisions = new HashMap<>();
 
         @Override
         public Project get(UUID id) {
@@ -256,12 +401,19 @@ class ProjectWorkflowTest {
             if (projects.putIfAbsent(project.id(), project) != null) {
                 throw new DesignException("PROJECT_EXISTS", "Already exists");
             }
+            revisions.put(project.id() + "@" + project.revision(), new StoredRevision(project, History.NONE));
         }
 
         @Override
-        public void replace(Project project, long expectedRevision) {
+        public void replace(Project project, long expectedRevision, History history) {
             assertThat(get(project.id()).revision()).isEqualTo(expectedRevision);
             projects.put(project.id(), project);
+            revisions.put(project.id() + "@" + project.revision(), new StoredRevision(project, history));
+        }
+
+        @Override
+        public java.util.Optional<StoredRevision> revision(UUID id, long revision) {
+            return java.util.Optional.ofNullable(revisions.get(id + "@" + revision));
         }
 
         @Override

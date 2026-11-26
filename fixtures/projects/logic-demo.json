@@ -1110,38 +1110,47 @@
   "nets" : [ {
     "id" : "952e694c-5754-4294-a68f-a3d33766184b",
     "name" : "VCC",
-    "pinIds" : [ "cabcbfe2-588b-4ba8-a602-db5f31ea20ec", "cffe287e-3301-44e3-ad29-8cf873d1a808", "df6a6e3a-0f9d-4182-953e-41003333365a", "e8e2f708-e376-4fe9-8d94-a25aa6976b5c", "2831aa1a-55a5-432e-a406-46d3e6edd984", "2a96fab9-0146-4109-a713-7674c4eaf6d3", "528a1549-5f56-48b1-873b-374e7f6d2f0e", "643bc87a-4590-4475-9fa1-c618cecebded", "7a7fd944-3dcc-40fd-bcc7-796ce0fc8814" ]
+    "pinIds" : [ "cabcbfe2-588b-4ba8-a602-db5f31ea20ec", "cffe287e-3301-44e3-ad29-8cf873d1a808", "df6a6e3a-0f9d-4182-953e-41003333365a", "e8e2f708-e376-4fe9-8d94-a25aa6976b5c", "2831aa1a-55a5-432e-a406-46d3e6edd984", "2a96fab9-0146-4109-a713-7674c4eaf6d3", "528a1549-5f56-48b1-873b-374e7f6d2f0e", "643bc87a-4590-4475-9fa1-c618cecebded", "7a7fd944-3dcc-40fd-bcc7-796ce0fc8814" ],
+    "wires" : [ ]
   }, {
     "id" : "4d907164-5994-4a87-a713-06f3d0123237",
     "name" : "GND",
-    "pinIds" : [ "0dbcbf7a-2236-4233-8dcb-7cf92ed2d9a6", "1b44b395-5a81-43bd-8654-ec36af976def", "3f007fd3-4c5b-47c0-8dbd-12e287809994", "44c6cff5-316b-423e-9a05-3f0bdc950a61", "689c952c-b70d-4897-820c-d4335c06b42a", "79508673-ab1e-4caf-a05c-3d4f691717b5", "7c454e1a-0f09-47d7-aa31-2aa363789e84" ]
+    "pinIds" : [ "0dbcbf7a-2236-4233-8dcb-7cf92ed2d9a6", "1b44b395-5a81-43bd-8654-ec36af976def", "3f007fd3-4c5b-47c0-8dbd-12e287809994", "44c6cff5-316b-423e-9a05-3f0bdc950a61", "689c952c-b70d-4897-820c-d4335c06b42a", "79508673-ab1e-4caf-a05c-3d4f691717b5", "7c454e1a-0f09-47d7-aa31-2aa363789e84" ],
+    "wires" : [ ]
   }, {
     "id" : "559457aa-c40d-453f-87a0-41d9de5d4b86",
     "name" : "CLK",
-    "pinIds" : [ "d166bf05-d75a-4c67-9932-24cbe4438164", "e6ffa4c7-331e-4fbd-aee9-027d144b6bf3", "10e38c32-d3b2-4e00-9129-1305d82c8d31" ]
+    "pinIds" : [ "d166bf05-d75a-4c67-9932-24cbe4438164", "e6ffa4c7-331e-4fbd-aee9-027d144b6bf3", "10e38c32-d3b2-4e00-9129-1305d82c8d31" ],
+    "wires" : [ ]
   }, {
     "id" : "8e56dd6c-7516-44a3-a167-cdaa5657c8e7",
     "name" : "FB",
-    "pinIds" : [ "a186db46-088e-4a56-ad9b-e0cd5a6141b8", "d1d83b74-0896-4380-a418-49012fe5d002" ]
+    "pinIds" : [ "a186db46-088e-4a56-ad9b-e0cd5a6141b8", "d1d83b74-0896-4380-a418-49012fe5d002" ],
+    "wires" : [ ]
   }, {
     "id" : "ec5f9342-b49b-454d-9b6a-95f91dedb8af",
     "name" : "Q",
-    "pinIds" : [ "10a42e56-7504-4d94-8cff-f3b38cd72d52", "26159b65-8160-422d-9c88-8b3ba475e288", "5b18a26b-e009-4170-ae64-95594361de5e" ]
+    "pinIds" : [ "10a42e56-7504-4d94-8cff-f3b38cd72d52", "26159b65-8160-422d-9c88-8b3ba475e288", "5b18a26b-e009-4170-ae64-95594361de5e" ],
+    "wires" : [ ]
   }, {
     "id" : "bc73320d-c7ed-40a1-ae1d-9800e2d6969f",
     "name" : "EN",
-    "pinIds" : [ "24e3cacf-f23b-4761-9ca1-d7f26b75e507", "3aefa85b-e80b-4324-af3e-cb3225f62ce0", "54dac834-3149-476d-81cf-d2ae75b9d999" ]
+    "pinIds" : [ "24e3cacf-f23b-4761-9ca1-d7f26b75e507", "3aefa85b-e80b-4324-af3e-cb3225f62ce0", "54dac834-3149-476d-81cf-d2ae75b9d999" ],
+    "wires" : [ ]
   }, {
     "id" : "55d2fdce-1561-4a09-96fc-4c32dff44db1",
     "name" : "XOR",
-    "pinIds" : [ "b711a23e-aca4-4b08-8ed6-1174a2abae9c", "ed3d5ad9-59b7-4f40-8b0e-603039e5c618" ]
+    "pinIds" : [ "b711a23e-aca4-4b08-8ed6-1174a2abae9c", "ed3d5ad9-59b7-4f40-8b0e-603039e5c618" ],
+    "wires" : [ ]
   }, {
     "id" : "c13e3d9f-9359-421f-a06c-da17f265e2ff",
     "name" : "GATED",
-    "pinIds" : [ "1800c976-ebf8-45b4-aac5-6f81544f65d4", "79117cc4-14b3-42ef-8e62-f4335912d6fb" ]
+    "pinIds" : [ "1800c976-ebf8-45b4-aac5-6f81544f65d4", "79117cc4-14b3-42ef-8e62-f4335912d6fb" ],
+    "wires" : [ ]
   } ],
+  "parts" : [ ],
   "revision" : 1,
-  "schemaVersion" : "0.2",
+  "schemaVersion" : "0.3",
   "sheets" : [ {
     "id" : "70341673-194c-4f82-86a6-a9c1fdf388c4",
     "name" : "Main"

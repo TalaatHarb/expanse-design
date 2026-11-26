@@ -9,9 +9,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import net.talaatharb.expanse.dto.ApiModels.ApiError;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +26,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 @Configuration(proxyBeanMethods = false)
 public class SecurityConfiguration {
+    static final String[] PUBLIC_PATHS = {"/actuator/health", "/actuator/health/**", "/actuator/info",
+            "/v3/api-docs", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**"};
+
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, ObjectMapper mapper,
             @Value("${expanse.api-token:${EXPANSE_API_TOKEN:}}") String token,
@@ -42,6 +44,8 @@ public class SecurityConfiguration {
                 .cors(cors -> cors.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Liveness and API documentation carry no project data.
+                        .requestMatchers(HttpMethod.GET, PUBLIC_PATHS).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/**").authenticated()
                         // Read-only computations that never persist anything.
                         .requestMatchers(HttpMethod.POST, "/api/v1/projects/*/changes/preview",
@@ -68,8 +72,8 @@ public class SecurityConfiguration {
         mapper.writeValue(response.getOutputStream(), new ApiError(code, message, null));
     }
 
+    @Slf4j
     private static final class TokenFilter extends OncePerRequestFilter {
-        private static final Logger LOG = LoggerFactory.getLogger(TokenFilter.class);
         private final byte[] owner;
         private final byte[] reader;
 

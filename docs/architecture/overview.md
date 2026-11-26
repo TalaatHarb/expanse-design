@@ -71,8 +71,10 @@ transaction durability; filesystem export additionally uses a sibling temporary
 file, backup, and atomic replacement. Unsupported atomic replacement is reported
 as an error, never silently downgraded.
 
-Flyway migration versions and JSON schema versions are separate. Schema `0.2`
-is current: it adds typed definitions (kind, parameters, footprint, body),
+Flyway migration versions and JSON schema versions are separate. Schema `0.3`
+is current: it adds drawn wires on nets (pin or free ends, bend points) and
+project part definitions; `0.2` documents migrate by adding empty lists. Schema
+`0.2` added typed definitions (kind, parameters, footprint, body),
 component properties and rotation, and the board (outline, rules, placements,
 traces). `0.1` documents are migrated on read by mapping the old built-in
 definitions to their current versions while preserving every identity; unknown
@@ -105,7 +107,9 @@ is not inferred. Validation is a pure query and does not advance revisions.
 Every successful edit advances the project revision once and immediately
 persists it. All edits (desktop, REST, MCP) are typed operations in a change set
 that is previewed or applied atomically against an expected revision; there is
-one change engine. Undo is not yet implemented.
+one change engine. Undo/redo restore a stored earlier document as a new
+revision. Wires are drawing geometry only: `draw_wire` connects its end pins as a
+side effect, and deleting a wire never changes connectivity.
 
 ## ADR-004: engines and native code
 
@@ -142,6 +146,14 @@ properties. Main dependency families are Spring/Feign/Jackson/Flyway (Apache
 2.0), JavaFX (GPLv2 with Classpath Exception), NetworkNT (Apache 2.0), H2 (MPL 2.0/EPL 1.0),
 PostgreSQL JDBC (BSD-2-Clause), and MCP Java SDK (MIT). JUnit, AssertJ,
 Mockito, and Testcontainers are test-only dependencies.
+Lombok and MapStruct (MIT/Apache 2.0) are compile-time annotation processors
+configured once in the parent POM (`annotationProcessorPaths`: Lombok, then
+`lombok-mapstruct-binding`, then MapStruct). Lombok is `provided` scope and is
+excluded from Boot jars; `lombok.config` keeps record-style fluent accessors and
+the `LOG` logger name. MapStruct generates `DesignViewMapper` (domain records to
+API views) with `unmappedTargetPolicy=ERROR`, so a new DTO field fails the build
+until it is mapped. The server adds Spring Boot Actuator (anonymous health/info
+only) and springdoc-openapi (Apache 2.0) for `/v3/api-docs` and Swagger UI.
 These are initial family-level notes, not a completed redistribution review.
 
 CI records the source revision in manifests and archives runtime dependency

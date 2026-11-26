@@ -1,7 +1,9 @@
 package net.talaatharb.expanse.connector;
 
+import lombok.Getter;
 import net.talaatharb.expanse.dto.ApiModels.ApiError;
 
+@Getter
 public final class ConnectorException extends RuntimeException {
     private final int status;
     private final ApiError error;
@@ -11,13 +13,5 @@ public final class ConnectorException extends RuntimeException {
                 + (error.currentRevision() == null ? "" : " (current revision " + error.currentRevision() + ")"));
         this.status = status;
         this.error = error;
-    }
-
-    public int status() {
-        return status;
-    }
-
-    public ApiError error() {
-        return error;
     }
 }

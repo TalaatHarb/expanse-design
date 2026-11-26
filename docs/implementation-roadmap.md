@@ -48,14 +48,49 @@ without changing that user-authored plan.
 - [x] MCP: 27 annotated tools gated by `McpPolicy` (read, edit, destructive).
 - [x] Capture mode (`expanse.desktop.capture-dir`) for screenshot-based checks.
 
+## R0d: implemented undo/redo, wire graphics and project parts (schema 0.3)
+
+- [x] Undo/redo: every revision's document is kept (`project_revisions`, Flyway
+  V2); undo/redo restore an earlier state as a new revision, so clients see it
+  like any edit. REST `/history`, `/history/undo`, `/history/redo`; MCP
+  `project.get_history`, `project.undo`, `project.redo`; desktop Edit menu.
+- [x] Schema 0.3: nets carry drawn wires (pin or free ends plus bend points) and
+  projects carry custom part definitions; 0.2 documents migrate losslessly.
+- [x] Wire graphics: `draw_wire`/`delete_wire` operations, tees onto existing
+  wires, wires kept through net merges and removed with their pins; desktop
+  bends, orthogonal elbows, junction dots, wire selection/deletion and dashed
+  lines for pins not yet reached by wires. Connectivity stays pin membership.
+- [x] Part editor: `define_part`/`delete_part` operations (`PART_IN_USE`), MCP
+  `parts.list`/`parts.define`; `generic` parts (box symbol, ignored by
+  simulation with a warning) or parts compatible with a built-in kind's model;
+  redefinition updates placed instances (pins by number, values kept when
+  valid, board placement dropped if the part becomes virtual). Desktop dialog
+  with pins/parameters/pads text forms, DIP/SIP pad generator, courtyard and 3D
+  body; project parts lead the palette.
+- [x] Change engine now has 20 operation types; MCP has 33 tools.
+
+## R0e: implemented tooling, health and settings
+
+- [x] Lombok (`@Slf4j`, `@RequiredArgsConstructor`, fluent `@Getter`) and a
+  MapStruct `DesignViewMapper` replacing hand-written domain-to-DTO mapping;
+  processors configured in the parent POM, Lombok excluded from runtime jars.
+- [x] Server Actuator: anonymous `/actuator/health` (status only, liveness and
+  readiness groups) and `/actuator/info`; all other actuator endpoints denied.
+- [x] springdoc-openapi: `/v3/api-docs` and `/swagger-ui.html` with the bearer
+  scheme and a discriminator mapping for every change-set `op`.
+- [x] Desktop health dot (5 s polling, tooltip, click for settings) and
+  *File > Settings* (mode, URL, token, data directory) persisted to
+  `settings.properties` below CLI/env precedence, with in-place reconnect and
+  rollback, and a settings prompt instead of a failed launch.
+
 ## R0b: complete the foundation release gate
 
 1. Add automated JavaFX user journeys (create/place/wire/simulate/route/save/
    reopen) on Windows and Linux; manually validate accessibility and rendering.
 2. Exercise an independent production MCP client on each supported OS. The
    existing wire-level protocol peer is a contract test, not that acceptance gate.
-3. Add persisted wire graphics and junctions, undo/redo, multi-select and
-   copy/paste. Keep electrical identity separate from drawing geometry.
+3. Add multi-select, copy/paste, net labels and graphical symbol/footprint
+   drawing (wires, undo/redo and form-based part editing exist).
 4. Add autosave/recovery UX, asset manifests, general extension JSON, and
    explicit import compatibility reports.
 5. Bind MCP approvals to specific previews, persist change events, and add
@@ -76,10 +111,10 @@ verified on both first-class platforms.
 | Plan IDs | Current executable coverage | Remaining gap |
 | --- | --- | --- |
 | ARC-001 | Headless domain/application tests; client dependency bans | Broader architecture rules as modules grow |
-| PRJ-001/002 | JSON round-trip, 0.1→0.2 migration, H2 reopen, future-schema rejection, desktop session open/save/conflict tests | GUI reopen acceptance |
+| PRJ-001/002 | JSON round-trip, 0.1→0.2→0.3 migration, undo/redo history, H2 reopen, future-schema rejection, desktop session open/save/conflict tests | GUI reopen acceptance |
 | PRJ-003 / XPL-002 | Atomic file save, retained backup, Unicode/spaced paths, dirty tracking | Interrupted-save fault injection, recovery UX |
 | SCH-001/002/004 | Change-set placement/move/wire/delete, validation purity | Automated GUI journey |
-| SCH-003 | Co-located components never infer connectivity | Persisted wire graphics/junctions |
+| SCH-003 | Co-located components never infer connectivity; wires drawn/merged/cleaned up with nets, schema 0.2→0.3 migration | Automated GUI journey |
 | LIB-002 | Exact definition snapshot/version round-trip | Library update/migration workflow |
 | VAL-001/002 | Structured stable findings per part kind; unchanged revisions | More electrical rules |
 | SIM (R1) | Reference circuits: dividers, RC/RL transients, switch events, BJT/MOS operating points | Engine evaluation vs ngspice/Xyce, cancellation |

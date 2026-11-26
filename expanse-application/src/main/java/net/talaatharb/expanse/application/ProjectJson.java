@@ -1,14 +1,18 @@
 package net.talaatharb.expanse.application;
 
 import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.StreamReadConstraints;
 import com.fasterxml.jackson.core.StreamReadFeature;
+import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.networknt.schema.Schema;
@@ -38,10 +42,13 @@ public final class ProjectJson {
             .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
+            .addModule(new SimpleModule().addDeserializer(Design.Wire.class, new WireDeserializer()))
             .build();
 
     public static final String LEGACY_VERSION = "0.1";
+    public static final String PREVIOUS_VERSION = "0.2";
     private final Schema legacySchema;
+    private final Schema previousSchema;
     private final ComponentLibrary library;
 
     public ProjectJson() {
@@ -52,6 +59,7 @@ public final class ProjectJson {
         this.library = library;
         schema = load(Design.SCHEMA_VERSION);
         legacySchema = load(LEGACY_VERSION);
+        previousSchema = load(PREVIOUS_VERSION);
     }
 
     private static Schema load(String version) {
@@ -94,6 +102,12 @@ public final class ProjectJson {
                             "Project JSON does not conform to schema 0.1; check required fields, types, IDs and units");
                 }
                 tree = migrateFromLegacy((ObjectNode) tree);
+            } else if (version.isTextual() && PREVIOUS_VERSION.equals(version.textValue())) {
+                if (!previousSchema.validate(tree).isEmpty()) {
+                    throw new DesignException("INVALID_DOCUMENT",
+                            "Project JSON does not conform to schema 0.2; check required fields, types, IDs and units");
+                }
+                tree = migrateFromPrevious((ObjectNode) tree);
             } else if (version.isTextual() && !Design.SCHEMA_VERSION.equals(version.textValue())) {
                 throw new DesignException("UNSUPPORTED_SCHEMA", "Unsupported project schema: " + version.textValue());
             }
@@ -115,7 +129,7 @@ public final class ProjectJson {
     /**
      * 0.1 documents carried pin-only definition snapshots. Migration substitutes the current built-in definition
      * with the same ID (pins must match), adds default parameter values, rotation 0 and an empty board.
-     * Identity and revision are preserved so a migrated project keeps its history position.
+     * Identity and revision are preserved so a migrated project keeps its history position. Continues to 0.3.
      */
     private JsonNode migrateFromLegacy(ObjectNode tree) {
         tree.put("schemaVersion", Design.SCHEMA_VERSION);
@@ -135,6 +149,42 @@ public final class ProjectJson {
             component.set("properties", mapper.valueToTree(definition.defaults()));
         }
         tree.set("board", mapper.valueToTree(Design.Board.empty()));
+        return migrateFromPrevious(tree);
+    }
+
+    /** 0.2 → 0.3: nets gain (empty) wire graphics and the project gains an (empty) custom part list. */
+    private JsonNode migrateFromPrevious(ObjectNode tree) {
+        tree.put("schemaVersion", Design.SCHEMA_VERSION);
+        for (JsonNode net : tree.withArray("nets")) {
+            ((ObjectNode) net).putArray("wires");
+        }
+        tree.putArray("parts");
         return tree;
+    }
+
+    /** Wire ends may be null (free ends), which the strict creator settings would otherwise reject. */
+    private static final class WireDeserializer extends StdDeserializer<Design.Wire> {
+        WireDeserializer() {
+            super(Design.Wire.class);
+        }
+
+        @Override
+        public Design.Wire deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            JsonNode node = context.readTree(parser);
+            for (var field : node.properties()) {
+                if (!java.util.Set.of("id", "fromPinId", "toPinId", "points").contains(field.getKey())) {
+                    throw new DesignException("INVALID_DOCUMENT", "Unknown wire property " + field.getKey());
+                }
+            }
+            var points = new java.util.ArrayList<Design.Point>();
+            node.path("points").forEach(p -> points.add(new Design.Point(p.path("xMm").asDouble(),
+                    p.path("yMm").asDouble())));
+            return new Design.Wire(uuid(node.get("id")), uuid(node.get("fromPinId")), uuid(node.get("toPinId")),
+                    points);
+        }
+
+        private static java.util.UUID uuid(JsonNode value) {
+            return value == null || value.isNull() ? null : java.util.UUID.fromString(value.asText());
+        }
     }
 }

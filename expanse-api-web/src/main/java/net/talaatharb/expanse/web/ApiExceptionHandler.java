@@ -1,9 +1,8 @@
 package net.talaatharb.expanse.web;
 
+import lombok.extern.slf4j.Slf4j;
 import net.talaatharb.expanse.domain.DesignException;
 import net.talaatharb.expanse.dto.ApiModels.ApiError;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -13,16 +12,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+@Slf4j
 @RestControllerAdvice
 public final class ApiExceptionHandler extends ResponseEntityExceptionHandler {
-    private static final Logger LOG = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(DesignException.class)
     public ResponseEntity<ApiError> design(DesignException e) {
         HttpStatus status = switch (e.code()) {
             case "PROJECT_NOT_FOUND", "DEFINITION_NOT_FOUND", "COMPONENT_NOT_FOUND", "NET_NOT_FOUND",
                  "TRACE_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "REVISION_CONFLICT", "PROJECT_EXISTS" -> HttpStatus.CONFLICT;
+            case "REVISION_CONFLICT", "PROJECT_EXISTS", "NOTHING_TO_UNDO", "NOTHING_TO_REDO" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(new ApiError(e.code(), e.getMessage(), e.currentRevision()));

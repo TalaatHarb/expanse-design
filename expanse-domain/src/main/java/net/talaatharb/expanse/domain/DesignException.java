@@ -1,5 +1,8 @@
 package net.talaatharb.expanse.domain;
 
+import lombok.Getter;
+
+@Getter
 public final class DesignException extends RuntimeException {
     private final String code;
     private final Long currentRevision;
@@ -12,13 +15,5 @@ public final class DesignException extends RuntimeException {
         super(message);
         this.code = code;
         this.currentRevision = currentRevision;
-    }
-
-    public String code() {
-        return code;
-    }
-
-    public Long currentRevision() {
-        return currentRevision;
     }
 }

@@ -31,7 +31,7 @@ class McpContractTest {
         var api = mock(WorkbenchApi.class);
         UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
         when(api.project(id)).thenReturn(new Snapshot(id, "MCP circuit", 7, List.of(), List.of(), List.of(),
-                new BoardView(100, 80, 1.6, 0.2, List.of(), List.of(), List.of())));
+                new BoardView(100, 80, 1.6, 0.2, List.of(), List.of(), List.of()), List.of()));
         try (var serverInput = new PipedInputStream(65536);
              var clientWrite = new PipedOutputStream(serverInput);
              var clientInput = new PipedInputStream(65536);
@@ -53,7 +53,7 @@ class McpContractTest {
                         """);
                 JsonNode discovered = mapper.readTree(reads.submit(reader::readLine).get(10, TimeUnit.SECONDS));
                 JsonNode tools = discovered.path("result").path("tools");
-                assertThat(tools.size()).isEqualTo(16);
+                assertThat(tools.size()).isEqualTo(18);
                 for (JsonNode tool : tools) {
                     assertThat(tool.path("name").asText()).doesNotContain("place", "apply", "connect", "delete", "create");
                     assertThat(tool.path("annotations").path("readOnlyHint").asBoolean()).as(tool.toString()).isTrue();
@@ -86,7 +86,9 @@ class McpContractTest {
         var applied = new ChangeResult(id, 3, 4, true, List.of("Placed R1"), List.of(), List.of(), null);
         when(api.applyChanges(eq(id), any())).thenReturn(applied);
         var tools = byName(new WorkbenchTools(api, mapper, McpPolicy.editing()).specifications());
-        assertThat(tools).containsKeys("project.apply_changes", "schematic.place_component", "pcb.route")
+        assertThat(tools).containsKeys("project.apply_changes", "schematic.place_component", "pcb.route",
+                        "project.undo", "project.redo", "project.get_history", "schematic.draw_wire", "parts.define",
+                        "parts.list")
                 .doesNotContainKeys("project.delete", "schematic.delete_component");
         assertThat(tools.get("project.apply_changes").tool().annotations().destructiveHint()).isTrue();
         assertThat(tools.get("schematic.place_component").tool().annotations().readOnlyHint()).isFalse();
@@ -109,6 +111,23 @@ class McpContractTest {
                 "expectedRevision", 4, "operations", unknownField)).path("code").asText()).isEqualTo("INVALID_ARGUMENT");
         assertThat(call(mapper, tools, "schematic.place_component", Map.of("projectId", id.toString()))
                 .path("code").asText()).isEqualTo("INVALID_ARGUMENT");
+
+        when(api.undo(id, new HistoryStep(4))).thenReturn(new ChangeResult(id, 4, 5, true,
+                List.of("Undid revision 4; restored the content of revision 3"), List.of(), List.of(), null));
+        assertThat(tools.get("project.undo").tool().annotations().destructiveHint()).isFalse();
+        var undone = call(mapper, tools, "project.undo", Map.of("projectId", id.toString(), "expectedRevision", 4));
+        assertThat(undone.path("data").path("revision").asLong()).isEqualTo(5);
+        verify(api).undo(id, new HistoryStep(4));
+
+        call(mapper, tools, "schematic.draw_wire", Map.of("projectId", id.toString(), "expectedRevision", 5,
+                "from", "R1.2", "net", "VIN", "points", List.of(Map.of("xMm", 5, "yMm", 0))));
+        verify(api).applyChanges(id, new ChangeSet(5, List.of(new DrawWireOp("R1.2", null, "VIN",
+                List.of(new PointView(5, 0)), null))));
+        call(mapper, tools, "parts.define", Map.of("projectId", id.toString(), "expectedRevision", 6, "part",
+                Map.of("id", "sensor", "name", "Sensor", "pins", List.of(Map.of("number", "1", "name", "OUT",
+                        "required", true)))));
+        verify(api).applyChanges(id, new ChangeSet(6, List.of(new DefinePartOp(new PartSpec("sensor", null, "Sensor",
+                null, List.of(new PinSpec("1", "OUT", true)), null, null, null, 0, 0, null)))));
         verifyNoMoreInteractions(api);
 
         var full = byName(new WorkbenchTools(api, mapper, McpPolicy.full()).specifications());
@@ -122,7 +141,7 @@ class McpContractTest {
         var schema = WorkbenchTools.operationsSchema();
         @SuppressWarnings("unchecked")
         var variants = (List<Map<String, Object>>) ((Map<String, Object>) schema.get("items")).get("oneOf");
-        assertThat(variants).hasSize(16);
+        assertThat(variants).hasSize(20);
         var place = variants.stream().filter(v -> ((Map<?, ?>) v.get("properties")).get("op")
                 .equals(Map.of("const", "place_component"))).findFirst().orElseThrow();
         assertThat((List<Object>) place.get("required"))

@@ -23,11 +23,11 @@ class ProjectSessionTest {
     private final UUID id = UUID.randomUUID();
 
     private Snapshot snapshot(UUID projectId, long revision) {
-        return new Snapshot(projectId, "Circuit", revision, List.of(), List.of(), List.of(), null);
+        return new Snapshot(projectId, "Circuit", revision, List.of(), List.of(), List.of(), null, List.of());
     }
 
     private static String document(UUID projectId, long revision) {
-        return "{\"schemaVersion\":\"0.2\",\"id\":\"" + projectId + "\",\"name\":\"Circuit\",\"revision\":" + revision + "}";
+        return "{\"schemaVersion\":\"0.3\",\"id\":\"" + projectId + "\",\"name\":\"Circuit\",\"revision\":" + revision + "}";
     }
 
     private ChangeResult applied(long revision) {
@@ -51,6 +51,21 @@ class ProjectSessionTest {
         assertThat(session.dirty()).isFalse();
         assertThat(session.file()).isEqualTo(file.toAbsolutePath());
         assertThat(Files.readString(file)).isEqualTo(document(id, 1));
+    }
+
+    @Test
+    void undoAndRedoSendTheCurrentRevisionAndAdoptTheRestoredSnapshot() {
+        when(api.create(any())).thenReturn(snapshot(id, 0));
+        when(api.applyChanges(eq(id), any())).thenReturn(applied(1));
+        when(api.undo(id, new HistoryStep(1))).thenReturn(applied(2));
+        when(api.redo(id, new HistoryStep(2))).thenReturn(applied(3));
+
+        session.create("Circuit");
+        session.apply(List.of(new SyncBoardOp()));
+        assertThat(session.undo().revision()).isEqualTo(2);
+        assertThat(session.redo().revision()).isEqualTo(3);
+        assertThat(session.snapshot().revision()).isEqualTo(3);
+        assertThat(session.dirty()).isTrue();
     }
 
     @Test

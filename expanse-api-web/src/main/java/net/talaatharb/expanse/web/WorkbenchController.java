@@ -2,6 +2,7 @@ package net.talaatharb.expanse.web;
 
 import java.util.List;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import net.talaatharb.expanse.api.WorkbenchApi;
 import net.talaatharb.expanse.application.ProjectService;
 import net.talaatharb.expanse.dto.ApiModels.*;
@@ -10,12 +11,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequiredArgsConstructor
 public final class WorkbenchController implements WorkbenchApi {
     private final ProjectService service;
-
-    public WorkbenchController(ProjectService service) {
-        this.service = service;
-    }
 
     @Override
     public List<Capability> capabilities() {
@@ -75,6 +73,21 @@ public final class WorkbenchController implements WorkbenchApi {
     @Override
     public ChangeResult applyChanges(UUID id, ChangeSet changes) {
         return service.apply(id, changes);
+    }
+
+    @Override
+    public HistoryView history(UUID id) {
+        return service.history(id);
+    }
+
+    @Override
+    public ChangeResult undo(UUID id, HistoryStep request) {
+        return service.undo(id, request);
+    }
+
+    @Override
+    public ChangeResult redo(UUID id, HistoryStep request) {
+        return service.redo(id, request);
     }
 
     @Override

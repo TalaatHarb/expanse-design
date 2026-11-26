@@ -11,6 +11,7 @@ import net.talaatharb.expanse.domain.Design.Component;
 import net.talaatharb.expanse.domain.Design.Net;
 import net.talaatharb.expanse.domain.Design.Point;
 import net.talaatharb.expanse.domain.Design.Project;
+import net.talaatharb.expanse.domain.Design.Wire;
 import net.talaatharb.expanse.domain.DesignException;
 import net.talaatharb.expanse.dto.ApiModels.*;
 import net.talaatharb.expanse.library.ComponentLibrary;
@@ -60,7 +61,7 @@ public final class ChangeEngine {
                 Design.require(op.definitionId() != null && op.reference() != null,
                         "place_component requires definitionId and reference");
                 UUID sheet = op.sheetId() == null ? p.sheets().getFirst().id() : op.sheetId();
-                Project next = editor.place(p, sheet, library.get(op.definitionId()), op.reference(), op.xMm(),
+                Project next = editor.place(p, sheet, definition(p, op.definitionId()), op.reference(), op.xMm(),
                         op.yMm(), op.rotation() == null ? 0 : op.rotation(),
                         op.properties() == null ? java.util.Map.of() : op.properties());
                 Component c = next.component(op.reference());
@@ -92,10 +93,7 @@ public final class ChangeEngine {
             case ConnectOp op -> {
                 Design.require(op.pins() != null && op.pins().size() >= 2, "connect_pins requires at least two pins");
                 List<UUID> pins = op.pins().stream().map(s -> pin(p, s)).toList();
-                String name = op.name() != null && !op.name().isBlank() ? op.name()
-                        : p.nets().stream().filter(n -> pins.stream().anyMatch(n.pinIds()::contains))
-                        .map(Net::name).findFirst().orElse(defaultNetName(p, pins.getFirst()));
-                Project next = editor.connect(p, name, pins);
+                Project next = editor.connect(p, netName(p, op.name(), pins), pins);
                 Net net = next.nets().stream().filter(n -> n.pinIds().contains(pins.getFirst())).findFirst()
                         .orElseThrow();
                 created.add(new CreatedObject("net", net.name(), net.id()));
@@ -163,7 +161,89 @@ public final class ChangeEngine {
                 changes.add("Deleted trace " + op.traceId());
                 yield board.deleteTrace(p, op.traceId());
             }
+            case DrawWireOp op -> drawWire(p, op, changes, created);
+            case DeleteWireOp op -> {
+                changes.add("Deleted wire " + op.wireId());
+                yield editor.deleteWire(p, op.wireId());
+            }
+            case DefinePartOp op -> {
+                Design.Definition part = PartSpecs.toDefinition(op.part(), library);
+                var parts = new ArrayList<>(p.parts().stream().filter(d -> !d.id().equals(part.id())).toList());
+                boolean update = parts.size() < p.parts().size();
+                parts.add(part);
+                long instances = p.components().stream().filter(c -> c.definition().id().equals(part.id())).count();
+                created.add(new CreatedObject("part", part.id(), null));
+                changes.add((update ? "Updated" : "Defined") + " part " + part.id() + " (" + part.name() + ")"
+                        + (instances > 0 ? "; re-pinned " + instances + " instance(s)" : ""));
+                yield editor.redefine(p, parts, part);
+            }
+            case DeletePartOp op -> {
+                String id = PartSpecs.id(op.partId());
+                if (p.parts().stream().noneMatch(d -> d.id().equals(id))) {
+                    throw new DesignException("PART_NOT_FOUND", "Project part not found: " + id);
+                }
+                var users = p.components().stream().filter(c -> c.definition().id().equals(id))
+                        .map(Component::reference).toList();
+                if (!users.isEmpty()) {
+                    throw new DesignException("PART_IN_USE", id + " is used by " + String.join(", ", users)
+                            + "; delete those components first");
+                }
+                changes.add("Deleted part " + id);
+                yield p.withParts(p.parts().stream().filter(d -> !d.id().equals(id)).toList(), p.components(),
+                        p.nets(), p.board());
+            }
         };
+    }
+
+    private Project drawWire(Project p, DrawWireOp op, List<String> changes, List<CreatedObject> created) {
+        UUID from = blank(op.from()) ? null : pin(p, op.from());
+        UUID to = blank(op.to()) ? null : pin(p, op.to());
+        Net target = blank(op.net()) ? null : net(p, op.net());
+        var involved = new java.util.LinkedHashSet<UUID>();
+        if (from != null) {
+            involved.add(from);
+        }
+        if (to != null) {
+            involved.add(to);
+        }
+        if (target != null) {
+            involved.add(target.pinIds().getFirst());
+        }
+        Design.require(!involved.isEmpty(), "draw_wire needs a pin at one end or a net to draw on");
+        List<UUID> pins = List.copyOf(involved);
+        Project next = p;
+        boolean joined = pins.size() >= 2 && p.nets().stream().noneMatch(n -> n.pinIds().containsAll(pins));
+        if (joined) {
+            boolean existing = p.nets().stream().anyMatch(n -> pins.stream().anyMatch(n.pinIds()::contains));
+            next = editor.connect(p, netName(p, existing ? null : op.name(), pins), pins);
+        }
+        final Project connected = next;
+        Net net = connected.nets().stream().filter(n -> n.pinIds().contains(pins.getFirst())).findFirst()
+                .orElseThrow(() -> new DesignException("PIN_NOT_CONNECTED", "A wire from an unconnected pin must "
+                        + "end on another pin or on a net"));
+        UUID id = UUID.randomUUID();
+        var points = op.points() == null ? List.<Point>of()
+                : op.points().stream().map(pt -> new Point(pt.xMm(), pt.yMm())).toList();
+        created.add(new CreatedObject("wire", net.name(), id));
+        changes.add("Drew wire " + (op.from() == null ? "(free)" : op.from()) + " to "
+                + (op.to() == null ? "(free)" : op.to()) + " on " + net.name() + (joined ? " (connected)" : ""));
+        return editor.addWire(connected, net.id(), new Wire(id, from, to, points));
+    }
+
+    /** Project parts take precedence over library parts. */
+    public Design.Definition definition(Project project, String id) {
+        return project.parts().stream().filter(d -> d.id().equals(id)).findFirst()
+                .orElseGet(() -> library.get(id));
+    }
+
+    private static String netName(Project p, String requested, List<UUID> pins) {
+        return requested != null && !requested.isBlank() ? requested
+                : p.nets().stream().filter(n -> pins.stream().anyMatch(n.pinIds()::contains))
+                .map(Net::name).findFirst().orElse(defaultNetName(p, pins.getFirst()));
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 
     public static Component component(Project project, String selector) {

@@ -95,6 +95,9 @@ final class Symbols {
         if (isDip(kind) && dipPin(pin.number()) != null) {
             return dipPin(pin.number());
         }
+        if (kind.equals("generic")) {
+            return genericPin(pins, pins.indexOf(pin));
+        }
         int index = pins.indexOf(pin);
         return new double[]{-LEAD + index * GRID * 2, LEAD};
     }
@@ -115,6 +118,7 @@ final class Symbols {
             case "logic-input", "logic-clock" -> new double[]{LEAD, GRID};
             case "logic-and", "logic-or", "logic-nand", "logic-nor", "logic-xor", "logic-not" ->
                     new double[]{LEAD, GRID + 0.5};
+            case "generic" -> new double[]{2 * GRID, genericHalfHeight(component.pins().size())};
             default -> isDip(component.kind()) ? new double[]{DIP_PIN_X, DIP_HALF_HEIGHT + 1}
                     : new double[]{LEAD, LEAD};
         };
@@ -271,6 +275,8 @@ final class Symbols {
             default -> {
                 if (isDip(component.kind())) {
                     drawDip(g, component);
+                } else if (component.kind().equals("generic")) {
+                    drawGeneric(g, component);
                 } else {
                     g.strokeRect(-LEAD, -GRID, 2 * LEAD, 2 * GRID);
                 }
@@ -302,6 +308,43 @@ final class Symbols {
             lead(g, outX + 0.8, 0, LEAD, 0);
         } else {
             lead(g, outX, 0, LEAD, 0);
+        }
+    }
+
+    /**
+     * Custom (generic) part box: the first half of the pins on the left from the top, the rest on the right from the
+     * top, one grid step apart so every pin stays on the grid.
+     */
+    static double[] genericPin(List<PinView> pins, int index) {
+        int left = (pins.size() + 1) / 2;
+        boolean onLeft = index < left;
+        int row = onLeft ? index : index - left;
+        return new double[]{onLeft ? -3 * GRID : 3 * GRID, (row - (left - 1) / 2) * GRID};
+    }
+
+    private static double genericHalfHeight(int pins) {
+        int left = (pins + 1) / 2;
+        return Math.max((left - 1) / 2, left - 1 - (left - 1) / 2) * GRID + GRID;
+    }
+
+    private static void drawGeneric(GraphicsContext g, ComponentView component) {
+        double body = 2 * GRID;
+        double top = -genericHalfHeight(component.pins().size());
+        double bottom = top;
+        for (int i = 0; i < component.pins().size(); i++) {
+            bottom = Math.max(bottom, genericPin(component.pins(), i)[1] + GRID);
+            top = Math.min(top, genericPin(component.pins(), i)[1] - GRID);
+        }
+        g.strokeRect(-body, top, 2 * body, bottom - top);
+        g.setFont(Font.font(1.1));
+        g.setTextBaseline(VPos.CENTER);
+        for (int i = 0; i < component.pins().size(); i++) {
+            PinView pin = component.pins().get(i);
+            double[] at = genericPin(component.pins(), i);
+            boolean left = at[0] < 0;
+            lead(g, at[0], at[1], left ? -body : body, at[1]);
+            g.setTextAlign(left ? TextAlignment.LEFT : TextAlignment.RIGHT);
+            g.fillText(pin.name(), left ? -body + 0.4 : body - 0.4, at[1]);
         }
     }
 

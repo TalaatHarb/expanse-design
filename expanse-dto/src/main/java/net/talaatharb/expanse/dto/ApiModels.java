@@ -53,10 +53,14 @@ public final class ApiModels {
                                 boolean physical, List<PinView> pins) {
     }
 
-    public record NetView(UUID id, String name, List<UUID> pinIds) {
+    public record NetView(UUID id, String name, List<UUID> pinIds, List<WireView> wires) {
     }
 
     public record PointView(double xMm, double yMm) {
+    }
+
+    /** Attached ends reference pins; a null pin means the first/last point is a free end. Other points are bends. */
+    public record WireView(UUID id, UUID fromPinId, UUID toPinId, List<PointView> points) {
     }
 
     public record PlacementView(UUID componentId, String reference, double xMm, double yMm, int rotation,
@@ -75,7 +79,36 @@ public final class ApiModels {
     }
 
     public record Snapshot(UUID id, String name, long revision, List<SheetView> sheets,
-                           List<ComponentView> components, List<NetView> nets, BoardView board) {
+                           List<ComponentView> components, List<NetView> nets, BoardView board,
+                           List<PartSpec> parts) {
+    }
+
+    // ---- Custom (project-local) parts ----
+
+    public record PinSpec(@NotBlank @Size(max = 200) String number, @NotBlank @Size(max = 200) String name,
+                          boolean required) {
+    }
+
+    public record PadSpec(@NotBlank @Size(max = 200) String number, double xMm, double yMm, double widthMm,
+                          double heightMm, double drillMm) {
+    }
+
+    /** Shape is box, cylinder, axial or none; colour is #RRGGBB. */
+    public record BodySpec(@NotBlank String shape, double widthMm, double depthMm, double heightMm,
+                           @NotBlank String color) {
+    }
+
+    /**
+     * A project-local part definition. IDs start with {@code project.}; a bare name is prefixed automatically.
+     * Kind defaults to {@code generic} (schematic box symbol, no simulation model); a built-in kind may be used when
+     * the pins and parameters match what its simulation model expects. Without pads the part is schematic-only.
+     * Version defaults to 1, footprint name to the part name and body to a grey box over the courtyard.
+     */
+    public record PartSpec(@NotBlank @Size(max = 200) String id, String version, @NotBlank @Size(max = 200) String name,
+                           String kind, @NotNull @Size(min = 1, max = 500) List<@NotNull @Valid PinSpec> pins,
+                           @Size(max = 100) List<@NotNull ParameterView> parameters, String footprintName,
+                           @Size(max = 500) List<@NotNull @Valid PadSpec> pads, double courtyardWidthMm,
+                           double courtyardHeightMm, @Valid BodySpec body) {
     }
 
     public record DefinitionView(String id, String version, String name, String kind, List<PinView> pins,
@@ -119,10 +152,15 @@ public final class ApiModels {
             @JsonSubTypes.Type(value = SetBoardOp.class, name = "set_board"),
             @JsonSubTypes.Type(value = RouteOp.class, name = "route"),
             @JsonSubTypes.Type(value = AddTraceOp.class, name = "add_trace"),
-            @JsonSubTypes.Type(value = DeleteTraceOp.class, name = "delete_trace")})
+            @JsonSubTypes.Type(value = DeleteTraceOp.class, name = "delete_trace"),
+            @JsonSubTypes.Type(value = DrawWireOp.class, name = "draw_wire"),
+            @JsonSubTypes.Type(value = DeleteWireOp.class, name = "delete_wire"),
+            @JsonSubTypes.Type(value = DefinePartOp.class, name = "define_part"),
+            @JsonSubTypes.Type(value = DeletePartOp.class, name = "delete_part")})
     public sealed interface Operation permits PlaceOp, MoveOp, SetPropertiesOp, SetReferenceOp, DeleteComponentOp,
             ConnectOp, DisconnectOp, RenameNetOp, RenameProjectOp, SyncBoardOp, PlaceFootprintOp,
-            UnplaceFootprintOp, SetBoardOp, RouteOp, AddTraceOp, DeleteTraceOp {
+            UnplaceFootprintOp, SetBoardOp, RouteOp, AddTraceOp, DeleteTraceOp, DrawWireOp, DeleteWireOp,
+            DefinePartOp, DeletePartOp {
         /** True when the operation removes user data and may need explicit approval. */
         default boolean destructive() {
             return false;
@@ -208,6 +246,36 @@ public final class ApiModels {
         }
     }
 
+    /**
+     * Draws a schematic wire. {@code from}/{@code to} are optional pin selectors; a missing end is free and is the
+     * first/last of {@code points} (for example a T on an existing wire of {@code net}). The pins and {@code net} are
+     * connected as with connect_pins, so drawing between two pins also creates or merges their nets. Name applies
+     * only when a new net is created.
+     */
+    public record DrawWireOp(String from, String to, String net, @Size(max = 1000) List<@NotNull PointView> points,
+                             String name) implements Operation {
+    }
+
+    /** Removes wire graphics only; connectivity is unchanged. */
+    public record DeleteWireOp(@NotNull UUID wireId) implements Operation {
+        @Override
+        public boolean destructive() {
+            return true;
+        }
+    }
+
+    /** Creates or replaces a project part; existing instances are re-pinned to the new definition. */
+    public record DefinePartOp(@NotNull @Valid PartSpec part) implements Operation {
+    }
+
+    /** Removes an unused project part. Fails with PART_IN_USE while instances exist. */
+    public record DeletePartOp(@NotBlank String partId) implements Operation {
+        @Override
+        public boolean destructive() {
+            return true;
+        }
+    }
+
     public record ChangeSet(@PositiveOrZero long expectedRevision,
                             @NotNull @Size(min = 1, max = 500) List<@NotNull @Valid Operation> operations) {
     }
@@ -222,6 +290,20 @@ public final class ApiModels {
     public record ChangeResult(UUID projectId, long baseRevision, long revision, boolean applied,
                                List<String> changes, List<CreatedObject> created, List<Diagnostic> diagnostics,
                                Snapshot snapshot) {
+    }
+
+    // ---- Undo / redo ----
+
+    public record HistoryStep(@PositiveOrZero long expectedRevision) {
+    }
+
+    /**
+     * Undo and redo restore an earlier document as a new revision, so they are ordinary, revision-checked edits
+     * shared by every client of the project. {@code undoRevision}/{@code redoRevision} name the revision whose
+     * content would be restored.
+     */
+    public record HistoryView(UUID projectId, long revision, boolean canUndo, boolean canRedo, Long undoRevision,
+                              Long redoRevision) {
     }
 
     // ---- Simulation ----

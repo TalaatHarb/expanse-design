@@ -115,12 +115,20 @@ public final class WorkbenchTools {
                                     .orElseThrow(() -> new IllegalArgumentException("Net not found: " + selector)));
                 });
         add(tools, "library.search_components", "Search library",
-                "Search built-in parts (resistor, capacitor, inductor, sources, ground, switches, BJTs, MOSFETs). "
+                "Search built-in parts (resistor, capacitor, inductor, sources, ground, switches, BJTs, MOSFETs, logic). "
+                        + "Project-specific parts are listed by parts.list. "
                         + "Optional kind filters by part kind such as resistor or npn.",
                 Kind.READ, List.of(opt("query", Map.of("type", "string", "maxLength", 200)), opt("kind", TEXT)), args -> {
                     String kind = args.optionalString("kind");
                     return api.search(args.optionalString("query") == null ? "" : args.optionalString("query")).stream()
                             .filter(d -> kind == null || d.kind().equalsIgnoreCase(kind)).toList();
+                });
+        add(tools, "parts.list", "List project parts",
+                "Read the project's custom part definitions (IDs start with project.) with pins, parameters, pads "
+                        + "and body. Place them with schematic.place_component like library parts.",
+                Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> {
+                    var project = api.project(args.uuid("projectId"));
+                    return Map.of("projectId", project.id(), "revision", project.revision(), "parts", project.parts());
                 });
         add(tools, "design.get_violations", "Design diagnostics", "Run electrical rule checks without mutating the project.",
                 Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> api.validate(args.uuid("projectId")));
@@ -162,6 +170,9 @@ public final class WorkbenchTools {
                             "maxHeightMm", scene.maxHeightMm(), "solids", scene.solids().size(),
                             "findings", scene.findings());
                 });
+        add(tools, "project.get_history", "Undo/redo state",
+                "Read whether the project can be undone or redone and which revision each would restore.",
+                Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> api.history(args.uuid("projectId")));
         add(tools, "project.preview_changes", "Preview change set",
                 "Dry-run an atomic list of operations and return the resulting changes and diagnostics without saving. "
                         + "Selectors accept UUIDs, references (R1), REF.PIN pins and net names.",
@@ -207,6 +218,25 @@ public final class WorkbenchTools {
                 Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
                         req("component", SELECTOR), req("properties", PROPERTIES)),
                 args -> single(args, new SetPropertiesOp(args.string("component"), args.properties("properties"))));
+        add(tools, "schematic.draw_wire", "Draw wire",
+                "Draw a schematic wire (graphics) from a pin to a pin through optional bend points (mm). Leave from "
+                        + "or to empty for a free end at the first/last point, for example a T on a wire of net. "
+                        + "The pins (and net) are connected as with schematic.connect_pins.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
+                        opt("from", PIN), opt("to", PIN), opt("net", TEXT),
+                        opt("points", schema(new TypeReference<List<PointView>>() { }.getType())), opt("name", TEXT)),
+                args -> single(args, new DrawWireOp(args.optionalString("from"), args.optionalString("to"),
+                        args.optionalString("net"), args.has("points") ? operationReader.convertValue(
+                        args.values.get("points"), new TypeReference<List<PointView>>() { }) : null,
+                        args.optionalString("name"))));
+        add(tools, "parts.define", "Define custom part",
+                "Create or replace a project part: pins, optional parameters, pads (a physical footprint; omit for "
+                        + "a schematic-only part), courtyard and body. Kind defaults to generic (no simulation model). "
+                        + "Existing instances are re-pinned by pin number.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
+                        req("part", schema(PartSpec.class))),
+                args -> single(args, new DefinePartOp(operationReader.convertValue(args.values.get("part"),
+                        PartSpec.class))));
         add(tools, "pcb.sync_board", "Sync board", "Place every physical schematic component that is not on the board.",
                 Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION)),
                 args -> single(args, new SyncBoardOp()));
@@ -223,6 +253,16 @@ public final class WorkbenchTools {
                         opt("widthMm", Map.of("type", "number", "exclusiveMinimum", 0))),
                 args -> single(args, new RouteOp(args.string("from"), args.string("to"),
                         args.optionalString("layer"), args.optionalNumber("widthMm"))));
+        add(tools, "project.undo", "Undo",
+                "Undo the latest edit (by anyone: the app, REST or MCP) by restoring the previous content as a new "
+                        + "revision. Reversible with project.redo.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION)),
+                args -> trim(api.undo(args.uuid("projectId"), new HistoryStep(args.longValue("expectedRevision"))),
+                        false));
+        add(tools, "project.redo", "Redo", "Reapply the most recently undone edit as a new revision.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION)),
+                args -> trim(api.redo(args.uuid("projectId"), new HistoryStep(args.longValue("expectedRevision"))),
+                        false));
         if (!policy.allowDestructive()) {
             return List.copyOf(tools);
         }

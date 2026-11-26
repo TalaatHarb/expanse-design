@@ -57,7 +57,7 @@ class ServerContractTest {
                     assertThat(e.error().currentRevision()).isEqualTo(2);
                 });
         Document document = client.exportProject(id);
-        assertThat(document.json()).contains("\"schemaVersion\" : \"0.2\"");
+        assertThat(document.json()).contains("\"schemaVersion\" : \"0.3\"");
         assertThatThrownBy(() -> client.importProject(document))
                 .isInstanceOfSatisfying(ConnectorException.class, e -> assertThat(e.status()).isEqualTo(409));
         assertThat(client.capabilities()).anyMatch(c -> c.id().equals("simulation") && c.available());
@@ -135,8 +135,38 @@ class ServerContractTest {
         var restored = client.replaceDocument(project.id(), new ReplaceDocument(2, saved));
         assertThat(restored.revision()).isEqualTo(3);
         assertThat(restored.components()).hasSize(4);
-        var copy = client.importCopy(new Document(saved));
+        var undone = client.undo(project.id(), new HistoryStep(3));
+        assertThat(undone.revision()).isEqualTo(4);
+        assertThat(undone.snapshot().components()).hasSize(3);
+        assertThat(client.history(project.id())).satisfies(h -> {
+            assertThat(h.canUndo()).isTrue();
+            assertThat(h.redoRevision()).isEqualTo(3L);
+        });
+        assertThat(client.redo(project.id(), new HistoryStep(4)).snapshot().components()).hasSize(4);
+        assertThatThrownBy(() -> client.redo(project.id(), new HistoryStep(5))).isInstanceOfSatisfying(
+                ConnectorException.class, e -> assertThat(e.error().code()).isEqualTo("NOTHING_TO_REDO"));
+
+        var custom = client.applyChanges(project.id(), new ChangeSet(5, List.of(
+                new DefinePartOp(new PartSpec("probe", null, "Probe", null, List.of(new PinSpec("1", "TIP", true)),
+                        null, null, null, 0, 0, null)),
+                new PlaceOp("project.probe", "TP1", 30, 10, null, null, null),
+                new DrawWireOp(null, "TP1.TIP", "OUT", List.of(new PointView(30, 0), new PointView(30, 5)), null))));
+        assertThat(custom.snapshot().parts()).extracting(PartSpec::id).containsExactly("project.probe");
+        var tee = custom.snapshot().nets().stream().filter(n -> n.name().equals("OUT")).findFirst().orElseThrow()
+                .wires().getFirst();
+        assertThat(tee.fromPinId()).isNull();
+        assertThat(tee.toPinId()).isNotNull();
+        String wired = client.exportProject(project.id()).json();
+        assertThat(wired).contains("\"fromPinId\" : null", "\"id\" : \"project.probe\"");
+
+        var copy = client.importCopy(new Document(wired));
         assertThat(copy.id()).isNotEqualTo(project.id());
+        assertThat(copy.parts()).hasSize(1);
+        var copiedTee = copy.nets().stream().filter(n -> n.name().equals("OUT")).findFirst().orElseThrow()
+                .wires().getFirst();
+        assertThat(copiedTee.id()).isNotEqualTo(tee.id());
+        assertThat(copy.components().stream().flatMap(c -> c.pins().stream()).map(PinView::id))
+                .contains(copiedTee.toPinId());
         client.delete(copy.id(), 0);
         assertThatThrownBy(() -> client.project(copy.id()))
                 .isInstanceOfSatisfying(ConnectorException.class, e -> assertThat(e.status()).isEqualTo(404));
@@ -193,6 +223,24 @@ class ServerContractTest {
                 "{\"sheetId\":\"" + project.sheets().getFirst().id()
                         + "\",\"definitionId\":\"builtin.resistor\",\"reference\":\"R1\",\"xMm\":0,\"yMm\":0}").statusCode())
                 .isEqualTo(400);
+    }
+
+    @Test
+    void healthAndApiDocsArePublicWhileEverythingElseStaysProtected() throws Exception {
+        var health = request("GET", "/actuator/health", null, null);
+        assertThat(health.statusCode()).isEqualTo(200);
+        assertThat(health.body()).isEqualTo("{\"status\":\"UP\",\"groups\":[\"liveness\",\"readiness\"]}");
+        assertThat(request("GET", "/actuator/health/readiness", null, null).statusCode()).isEqualTo(200);
+        assertThat(request("GET", "/actuator/env", null, null).statusCode()).isEqualTo(401);
+        assertThat(request("GET", "/actuator/env", "contract-owner-012345678901234567890123456789", null)
+                .statusCode()).isEqualTo(403);
+        assertThat(request("POST", "/actuator/health", null, "{}").statusCode()).isEqualTo(401);
+
+        var docs = request("GET", "/v3/api-docs", null, null);
+        assertThat(docs.statusCode()).as(docs.body()).isEqualTo(200);
+        assertThat(docs.body()).contains("\"title\":\"Expanse Design API\"", "/api/v1/projects/{id}/changes",
+                "\"bearerToken\"", "\"draw_wire\":\"#/components/schemas/DrawWireOp\"").doesNotContain("/actuator");
+        assertThat(request("GET", "/swagger-ui/index.html", null, null).statusCode()).isEqualTo(200);
     }
 
     private HttpResponse<String> request(String method, String path, String token, String body) throws Exception {

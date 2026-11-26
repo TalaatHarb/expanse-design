@@ -12,6 +12,9 @@ for _ in $(seq 1 60); do
     status=$(curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:8765/api/v1/projects)
     echo "authenticated: ready, anonymous: $status"
     test "$status" = 401
+    health=$(curl -fsS -m 5 http://127.0.0.1:8765/actuator/health/readiness)
+    echo "anonymous readiness: $health"
+    echo "$health" | grep -q '"status":"UP"'
     docker exec "$name" sh -c 'test -f /data/projects.mv.db && test "$(id -u)" != 0'
     echo "smoke test passed"
     exit 0

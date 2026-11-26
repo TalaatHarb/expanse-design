@@ -30,9 +30,14 @@ Implemented for **resistors, capacitors, inductors, DC sources, power rails,
 ground, SPST switches, NPN/PNP BJTs, N/P-channel MOSFETs, logic gates/sources and
 sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every layer:
 
-- **Schematic**: palette placement, drag/rotate/delete, pin-to-pin wiring, net
-  rename/disconnect, property editing, electrical rule checks.
-- **Simulation**: in-house MNA engine (DC operating point and transient with
+- **Schematic**: palette placement, drag/rotate/delete, drawn wires with bends,
+  tees and junction dots (saved in the project), net rename/disconnect, property
+  editing, electrical rule checks.
+- **Part editor**: project-specific parts with pins, parameters, DIP/SIP pad
+  generator, courtyard and 3D body; `generic` parts or parts that reuse a
+  built-in simulation model. Parts are stored inside the project file.
+- **Undo/redo** (Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z) for every edit, from the desktop,
+  REST or MCP; each step is a new revision so other clients see it.- **Simulation**: in-house MNA engine (DC operating point and transient with
   switch events); node voltages, pin currents, power and waveforms. Logic parts
   have behavioural analog models, and a separate event-driven four-state
   (0/1/X/Z) logic analysis produces timing diagrams.
@@ -40,13 +45,13 @@ sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every layer:
   orthogonal routing, ratsnest, shorts/clearance/outline DRC.
 - **3D**: parametric component bodies on the board (orthographic JavaFX 3D view with a camera rig after
   Oracle's sample application), collision/overhang checks, STL/OBJ overlay import.
-- **Persistence**: canonical JSON schema 0.2 (0.1 files migrate on open), H2 file
+- **Persistence**: canonical JSON schema 0.3 (0.1 and 0.2 files migrate on open), H2 file
   or PostgreSQL storage, atomic file save with `.bak`, revision conflict detection.
-- **MCP**: 27 policy-gated tools over stdio, including transactional change sets.
+- **MCP**: 33 policy-gated tools over stdio, including transactional change sets.
 
 All edits from the desktop, REST and MCP go through one transactional change-set
 engine: a batch of operations is previewed or applied as a single revision.
-Not yet implemented: hierarchy, symbol/footprint editors, undo, autorouting,
+Not yet implemented: hierarchy, graphical symbol/footprint drawing, autorouting,
 fabrication exports, SPICE import, STEP import.
 
 ## Downloads
@@ -116,9 +121,28 @@ Override the data directory with `EXPANSE_DATA_DIR` or desktop
   offers: use the file (replaces the server copy as a new revision), open as a
   copy (fresh IDs), or use the server version.
 - **Schematic**: pick a part in the palette and click to place (Shift keeps
-  placing); click a pin, then another pin to wire. Drag to move, R rotates, Del
-  deletes, wheel zooms, drag empty space pans. Right-click pins to disconnect or
+  placing). To wire, click a pin (or, with the Wire tool, an existing wire), click
+  empty space to add bends (Backspace removes one), and finish on a pin or wire;
+  Esc cancels. Click a wire to select it; Del deletes it (pins stay connected).
+  Nets without drawn wires are shown auto-routed; pins that a net's wires do not
+  reach yet are joined by dashed lines. Drag to move, R rotates, Del deletes,
+  wheel zooms, drag empty space pans. Right-click pins or wires to disconnect or
   rename nets; edit values in the property sheet. *Check (ERC)* lists findings.
+- **Part editor** (*Design > Part editor...*, Ctrl+E, or the button under the
+  palette): define pins (`number, name[, optional]`), parameters, pads (or
+  generate DIP/SIP pads), courtyard and 3D body. Project parts appear at the top
+  of the palette; editing a placed part updates its instances.
+- **Edit > Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z).
+- **File > Settings...** (Ctrl+,): mode (local or remote), server URL, API token
+  and data directory, saved to `%USERPROFILE%\.expanse-design\settings.properties`
+  (move it with `--expanse.settings-file=...`). *Save and reconnect* switches
+  servers in place (restoring the previous connection if the new one fails) and
+  reopens the current project file; *Save* applies at the next start.
+  Command-line options and environment variables override the file. If the
+  desktop cannot connect at startup it offers the settings instead of exiting.
+- **Server health**: the dot at the right of the status bar polls the server's
+  anonymous `/actuator/health` every 5 s: green UP, amber reachable but not
+  healthy, red unreachable. Hover for details; click to open the settings.
 - **Simulation**: choose `op`, `transient` or `logic`; values accept SI suffixes
   (`10m`, `2.2u`, `1meg`). Switch events are lines such as `S1 2m closed`.
   Logic shows a timing diagram (X shaded red, Z dashed) and final net levels.
@@ -157,9 +181,27 @@ java -jar .\expanse-desktop\target\expanse-desktop-0.1.0-SNAPSHOT.jar `
 ```
 
 Remote mode never starts a local server or silently falls back to local data.
+The same mode, URL and token can be set from **File > Settings...**.
 Remote connections require HTTPS. The server binds to loopback by default;
 place it behind a TLS reverse proxy for remote access. This initial owner/reader
 token model is for a trusted single-owner deployment, not multi-tenant hosting.
+
+## Health and API documentation
+
+The server includes Spring Boot Actuator and springdoc-openapi. These GET
+endpoints need no token and expose no project data:
+
+| Path | Content |
+| --- | --- |
+| `/actuator/health` (and `/liveness`, `/readiness`) | `{"status":"UP"}` only; details are never shown |
+| `/actuator/info` | Build and Java version |
+| `/v3/api-docs` | OpenAPI 3.1 document for `/api/v1/**`: bearer security scheme and the `op` discriminator mapping of change-set operations |
+| `/swagger-ui.html` | Swagger UI; *Authorize* with the owner or reader token to try calls |
+
+Every other actuator endpoint is denied. To hide the documentation on a deployed
+server, set `SPRINGDOC_API_DOCS_ENABLED=false` and
+`SPRINGDOC_SWAGGER_UI_ENABLED=false`. Use `/actuator/health/readiness` for
+container or load-balancer probes.
 
 ## PostgreSQL
 
@@ -207,10 +249,11 @@ When the desktop generated the token, use the contents of
 binding. Tokens must contain at least 32 URL-safe characters. MCP stdout contains
 only protocol messages; logs go to stderr.
 
-The bridge exposes 16 read-only tools (projects, components, nets, library,
-diagnostics, simulation, PCB board/analysis, 3D scene/checks, change preview),
-9 editing tools (`project.create`, `project.apply_changes`, placement, wiring,
-properties, board sync/placement/routing) and 2 destructive tools. Policy
+The bridge exposes 18 read-only tools (projects, components, nets, library,
+project parts, diagnostics, simulation, PCB board/analysis, 3D scene/checks,
+undo history, change preview), 13 editing tools (`project.create`,
+`project.apply_changes`, placement, wiring, drawn wires, part definitions,
+properties, board sync/placement/routing, undo/redo) and 2 destructive tools. Policy
 switches: `--expanse.mcp.allow-mutations=false` exposes only read tools;
 `--expanse.mcp.allow-destructive=true` additionally exposes deletes and lets
 `project.apply_changes` run destructive operations. Every tool carries MCP
@@ -220,9 +263,10 @@ read-only/destructive/idempotent hints. See [MCP and security](docs/architecture
 
 - [Architecture and decisions](docs/architecture/overview.md)
 - [Implementation roadmap and acceptance coverage](docs/implementation-roadmap.md)
-- [Project schema 0.2](schemas/project/0.2.schema.json),
+- [Project schema 0.3](schemas/project/0.3.schema.json),
   [all-parts fixture](fixtures/projects/all-parts.json), and the
-  [legacy 0.1 fixture](fixtures/projects/legacy/resistor-loop-0.1.json) used for migration tests
+  legacy [0.1](fixtures/projects/legacy/resistor-loop-0.1.json) and
+  [0.2](fixtures/projects/legacy/logic-demo-0.2.json) fixtures used for migration tests
 
 The REST API is strict: unknown JSON properties are rejected and every record
 field must be present (send `null` for optional values). The Feign connector

@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import net.talaatharb.expanse.domain.Design;
 import net.talaatharb.expanse.domain.Design.Component;
 import net.talaatharb.expanse.domain.Design.Net;
 import net.talaatharb.expanse.domain.Design.Project;
@@ -302,6 +303,8 @@ public final class CircuitSimulator {
                     }
                     case "ground" -> {
                     }
+                    case Design.GENERIC_KIND -> warnings.add(c.reference() + " (" + c.definition().name()
+                            + ") is a custom part without a simulation model; it is left open.");
                     default -> {
                         var part = Logic.part(c.definition().kind()).orElseThrow(() -> new DesignException(
                                 "SIM_UNSUPPORTED", "No simulation model for " + c.definition().kind()));

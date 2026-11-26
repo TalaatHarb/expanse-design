@@ -43,6 +43,15 @@ public interface WorkbenchApi {
     @PostMapping("/api/v1/projects/{id}/changes")
     ChangeResult applyChanges(@PathVariable("id") UUID id, @Valid @RequestBody ChangeSet changes);
 
+    @GetMapping("/api/v1/projects/{id}/history")
+    HistoryView history(@PathVariable("id") UUID id);
+
+    @PostMapping("/api/v1/projects/{id}/history/undo")
+    ChangeResult undo(@PathVariable("id") UUID id, @Valid @RequestBody HistoryStep request);
+
+    @PostMapping("/api/v1/projects/{id}/history/redo")
+    ChangeResult redo(@PathVariable("id") UUID id, @Valid @RequestBody HistoryStep request);
+
     @PostMapping("/api/v1/projects/{id}/simulations")
     SimulationReport simulate(@PathVariable("id") UUID id, @Valid @RequestBody SimulationRequest request);
 

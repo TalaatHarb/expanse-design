@@ -36,6 +36,20 @@ final class SchematicPane {
         }
     }
 
+    private record WireHit(NetView net, WireView wire, double x, double y) {
+    }
+
+    /** A wire end: either a pin or a point on an existing wire of a net (a tee). */
+    private record Anchor(UUID pinId, UUID netId, double x, double y, String label) {
+        static Anchor of(PinHit pin) {
+            return new Anchor(pin.pin().id(), null, pin.x(), pin.y(), pin.label());
+        }
+
+        static Anchor of(WireHit hit) {
+            return new Anchor(null, hit.net().id(), hit.x(), hit.y(), hit.net().name());
+        }
+    }
+
     private static final Color WIRE = Color.web("#1b7f3b");
     private static final Color INK = Color.web("#263238");
     private static final Color SELECTED = Color.web("#1565c0");
@@ -51,12 +65,15 @@ final class SchematicPane {
     private final ToggleButton wireTool = new ToggleButton("Wire");
     private final Label hint = new Label();
     private Snapshot project;
+    private List<DefinitionView> library = List.of();
     private Map<UUID, NetView> netByPin = Map.of();
     private double scale = 7;
     private double offsetX = 80;
     private double offsetY = 80;
     private Tool tool = Tool.SELECT;
-    private PinHit wireStart;
+    private Anchor wireStart;
+    private final List<double[]> bends = new ArrayList<>();
+    private UUID selectedWire;
     private double mouseX;
     private double mouseY;
     private ComponentView dragging;
@@ -77,14 +94,15 @@ final class SchematicPane {
         selectTool.setSelected(true);
         selectTool.setTooltip(new Tooltip("Select, drag to move, drag empty space to pan (S)"));
         placeTool.setTooltip(new Tooltip("Click to place the part selected in the palette (P)"));
-        wireTool.setTooltip(new Tooltip("Click two pins to connect them (W). Pins can also be wired in Select mode."));
+        wireTool.setTooltip(new Tooltip("Draw wires (W): click a pin or wire, click empty space to add bends, click a "
+                + "pin or wire to finish. Pins can also be wired in Select mode."));
         toolGroup.selectedToggleProperty().addListener((o, old, now) -> {
             if (now == null) {
                 old.setSelected(true);
                 return;
             }
             tool = now == placeTool ? Tool.PLACE : now == wireTool ? Tool.WIRE : Tool.SELECT;
-            wireStart = null;
+            cancelWire();
             updateHint();
             redraw();
         });
@@ -118,7 +136,11 @@ final class SchematicPane {
             }
         });
         palette.setPrefWidth(190);
-        var left = new VBox(4, new Label("Parts"), palette);
+        var newPart = new Button("Part editor...");
+        newPart.setTooltip(new Tooltip("Create or edit project parts (custom symbols, footprints and 3D bodies)"));
+        newPart.setMaxWidth(Double.MAX_VALUE);
+        newPart.setOnAction(e -> openPartEditor(null));
+        var left = new VBox(4, new Label("Parts"), palette, newPart);
         VBox.setVgrow(palette, Priority.ALWAYS);
         left.setPadding(new Insets(4));
 
@@ -143,10 +165,23 @@ final class SchematicPane {
         canvas.setOnKeyPressed(e -> {
             switch (e.getCode()) {
                 case R -> rotateSelected();
-                case DELETE, BACK_SPACE -> deleteSelected();
+                case DELETE -> deleteSelected();
+                case BACK_SPACE -> {
+                    if (wireStart != null) {
+                        if (!bends.isEmpty()) {
+                            bends.removeLast();
+                        }
+                        redraw();
+                    } else {
+                        deleteSelected();
+                    }
+                }
                 case ESCAPE -> {
-                    wireStart = null;
-                    selectTool.setSelected(true);
+                    if (wireStart != null) {
+                        cancelWire();
+                    } else {
+                        selectTool.setSelected(true);
+                    }
                     redraw();
                 }
                 case S -> selectTool.setSelected(true);
@@ -200,20 +235,62 @@ final class SchematicPane {
     }
 
     void setLibrary(List<DefinitionView> definitions) {
-        palette.getItems().setAll(definitions);
+        library = List.copyOf(definitions);
+        refreshPalette();
+    }
+
+    /** Project parts first, then the built-in library; the selection survives refreshes by ID. */
+    private void refreshPalette() {
+        var items = new ArrayList<DefinitionView>();
+        if (project != null) {
+            project.parts().forEach(part -> items.add(PartForms.definition(part)));
+        }
+        items.addAll(library);
+        if (items.equals(palette.getItems())) {
+            return;
+        }
+        DefinitionView selected = palette.getSelectionModel().getSelectedItem();
+        boolean placing = tool == Tool.PLACE;
+        palette.getItems().setAll(items);
+        if (selected != null) {
+            items.stream().filter(d -> d.id().equals(selected.id())).findFirst()
+                    .ifPresent(d -> palette.getSelectionModel().select(d));
+        }
+        if (!placing && tool == Tool.PLACE) {
+            selectTool.setSelected(true);
+        }
+    }
+
+    /** Opens the part editor, optionally on an existing project part, and applies the result. */
+    void openPartEditor(String partId) {
+        if (project == null) {
+            workbench.status("Open or create a project first; custom parts are stored in the project");
+            return;
+        }
+        PartEditor.show(canvas.getScene().getWindow(), project.parts(), library, partId).ifPresent(operation -> {
+            workbench.apply(List.of(operation));
+            workbench.status(operation instanceof DefinePartOp define ? "Saved part " + define.part().name()
+                    + "; it is at the top of the palette" : "Deleted part " + ((DeletePartOp) operation).partId());
+        });
     }
 
     void show(Snapshot snapshot, List<Diagnostic> latestDiagnostics) {
         project = snapshot;
+        refreshPalette();
         var index = new HashMap<UUID, NetView>();
         if (snapshot != null) {
             snapshot.nets().forEach(net -> net.pinIds().forEach(pin -> index.put(pin, net)));
         }
         netByPin = index;
         dragging = null;
-        if (wireStart != null && snapshot != null && snapshot.components().stream()
-                .noneMatch(c -> c.id().equals(wireStart.component().id()))) {
-            wireStart = null;
+        if (wireStart != null && (snapshot == null || (wireStart.pinId() != null
+                ? snapshot.components().stream().flatMap(c -> c.pins().stream()).noneMatch(p -> p.id().equals(wireStart.pinId()))
+                : snapshot.nets().stream().noneMatch(n -> n.id().equals(wireStart.netId()))))) {
+            cancelWire();
+        }
+        if (selectedWire != null && (snapshot == null || snapshot.nets().stream()
+                .flatMap(n -> n.wires().stream()).noneMatch(w -> w.id().equals(selectedWire)))) {
+            selectedWire = null;
         }
         if (snapshot != null && !snapshot.id().equals(fittedProject)) {
             fittedProject = snapshot.id();
@@ -229,6 +306,9 @@ final class SchematicPane {
     }
 
     void selectionChanged() {
+        if (workbench.selected() != null) {
+            selectedWire = null;
+        }
         showProperties();
         redraw();
     }
@@ -331,6 +411,46 @@ final class SchematicPane {
         return null;
     }
 
+    private Map<UUID, double[]> pinPositions() {
+        var positions = new HashMap<UUID, double[]>();
+        for (ComponentView c : project.components()) {
+            for (PinView p : c.pins()) {
+                positions.put(p.id(), Symbols.pin(c, p));
+            }
+        }
+        return positions;
+    }
+
+    /** Closest drawn wire within a few pixels; the hit point is snapped to the grid when it stays on the wire. */
+    private WireHit wireAt(double x, double y) {
+        if (project == null) {
+            return null;
+        }
+        var positions = pinPositions();
+        double radius = Math.max(0.8, 5 / scale);
+        WireHit best = null;
+        double bestDistance = radius;
+        for (NetView net : project.nets()) {
+            for (WireView wire : net.wires()) {
+                var path = WireGeometry.path(wire, positions);
+                if (path == null) {
+                    continue;
+                }
+                double[] at = WireGeometry.closest(path, mmX(x), mmY(y));
+                double distance = Math.hypot(at[0] - mmX(x), at[1] - mmY(y));
+                if (distance <= bestDistance) {
+                    double[] snapped = {snap(at[0]), snap(at[1])};
+                    if (WireGeometry.distance(path, snapped[0], snapped[1]) < WireGeometry.EPSILON) {
+                        at = snapped;
+                    }
+                    bestDistance = distance;
+                    best = new WireHit(net, wire, at[0], at[1]);
+                }
+            }
+        }
+        return best;
+    }
+
     // ---- Mouse ----
 
     private void pressed(MouseEvent e) {
@@ -348,8 +468,9 @@ final class SchematicPane {
         dragMoved = false;
         PinHit pin = pinAt(e.getX(), e.getY());
         ComponentView component = componentAt(e.getX(), e.getY());
+        WireHit wire = pin == null ? wireAt(e.getX(), e.getY()) : null;
         if (e.getButton() == MouseButton.SECONDARY) {
-            contextMenu(e, pin, component);
+            contextMenu(e, pin, component, wire);
             return;
         }
         if (e.getButton() == MouseButton.MIDDLE) {
@@ -371,30 +492,87 @@ final class SchematicPane {
             }
             return;
         }
-        if (pin != null) {
-            if (wireStart == null) {
-                wireStart = pin;
-                workbench.status("Wiring from " + pin.label() + "; click another pin, Esc to cancel");
-            } else if (!wireStart.pin().id().equals(pin.pin().id())) {
-                var from = wireStart;
-                wireStart = null;
-                workbench.apply(List.of(new ConnectOp(null, List.of(from.pin().id().toString(),
-                        pin.pin().id().toString()))));
-                workbench.status("Connected " + from.label() + " to " + pin.label());
-            }
-            redraw();
+        if (wireStart != null || pin != null || (tool == Tool.WIRE && wire != null)) {
+            wireClick(e, pin, wire);
             return;
         }
-        wireStart = null;
+        if (tool == Tool.WIRE) {
+            workbench.status("Start a wire on a pin or on an existing wire");
+            return;
+        }
         if (component != null) {
+            selectedWire = null;
             workbench.select(component.id());
             dragging = component;
             dragDx = mmX(e.getX()) - component.xMm();
             dragDy = mmY(e.getY()) - component.yMm();
+        } else if (wire != null) {
+            workbench.select(null);
+            selectedWire = wire.wire().id();
+            showProperties();
+            redraw();
         } else {
+            selectedWire = null;
             workbench.select(null);
             panning = true;
         }
+    }
+
+    private void wireClick(MouseEvent e, PinHit pin, WireHit wire) {
+        if (wireStart == null) {
+            wireStart = pin != null ? Anchor.of(pin) : Anchor.of(wire);
+            bends.clear();
+            workbench.status("Wiring from " + wireStart.label() + "; click empty space for bends, a pin or wire to "
+                    + "finish, Backspace removes a bend, Esc cancels");
+        } else if (pin != null) {
+            finishWire(Anchor.of(pin));
+        } else if (wire != null) {
+            finishWire(Anchor.of(wire));
+        } else {
+            double[] bend = {snap(mmX(e.getX())), snap(mmY(e.getY()))};
+            double[] last = bends.isEmpty() ? new double[] {wireStart.x(), wireStart.y()} : bends.getLast();
+            if (!WireGeometry.same(last, bend)) {
+                bends.add(bend);
+            }
+        }
+        redraw();
+    }
+
+    private void finishWire(Anchor end) {
+        Anchor start = wireStart;
+        if (start.pinId() != null && start.pinId().equals(end.pinId())) {
+            workbench.status("A wire cannot start and end on the same pin");
+            return;
+        }
+        if (start.netId() != null && end.netId() != null && !start.netId().equals(end.netId())) {
+            workbench.status("Two different nets can only be joined through a pin; finish this wire on a pin");
+            return;
+        }
+        var points = new ArrayList<PointView>();
+        if (start.pinId() == null) {
+            points.add(new PointView(start.x(), start.y()));
+        }
+        bends.forEach(b -> points.add(new PointView(b[0], b[1])));
+        if (end.pinId() == null) {
+            points.add(new PointView(end.x(), end.y()));
+        }
+        if (start.pinId() == null && end.pinId() == null
+                && WireGeometry.same(new double[] {start.x(), start.y()}, new double[] {end.x(), end.y()})) {
+            return;
+        }
+        UUID net = start.netId() != null ? start.netId() : end.netId();
+        cancelWire();
+        workbench.apply(List.of(new DrawWireOp(text(start.pinId()), text(end.pinId()), text(net), points, null)));
+        workbench.status("Wired " + start.label() + " to " + end.label());
+    }
+
+    private static String text(UUID id) {
+        return id == null ? null : id.toString();
+    }
+
+    private void cancelWire() {
+        wireStart = null;
+        bends.clear();
     }
 
     private void dragged(MouseEvent e) {
@@ -435,13 +613,14 @@ final class SchematicPane {
         redraw();
     }
 
-    private void contextMenu(MouseEvent e, PinHit pin, ComponentView component) {
+    private void contextMenu(MouseEvent e, PinHit pin, ComponentView component, WireHit wire) {
         menu = new ContextMenu();
         if (pin != null) {
             NetView net = netByPin.get(pin.pin().id());
             var start = new MenuItem("Start wire at " + pin.label());
             start.setOnAction(a -> {
-                wireStart = pin;
+                wireStart = Anchor.of(pin);
+                bends.clear();
                 redraw();
             });
             menu.getItems().add(start);
@@ -459,6 +638,27 @@ final class SchematicPane {
             var delete = new MenuItem("Delete (Del)");
             delete.setOnAction(a -> deleteSelected());
             menu.getItems().addAll(rotate, delete);
+            if (component.definitionId().startsWith("project.")) {
+                var edit = new MenuItem("Edit part " + component.definitionId() + "...");
+                edit.setOnAction(a -> openPartEditor(component.definitionId()));
+                menu.getItems().add(edit);
+            }
+        } else if (wire != null) {
+            selectedWire = wire.wire().id();
+            workbench.select(null);
+            var start = new MenuItem("Start wire here (tee)");
+            start.setOnAction(a -> {
+                wireStart = Anchor.of(wire);
+                bends.clear();
+                redraw();
+            });
+            var delete = new MenuItem("Delete wire (Del)");
+            delete.setOnAction(a -> deleteSelected());
+            var rename = new MenuItem("Rename net " + wire.net().name() + "...");
+            rename.setOnAction(a -> renameNet(wire.net()));
+            menu.getItems().addAll(start, delete, rename);
+            showProperties();
+            redraw();
         } else {
             return;
         }
@@ -488,6 +688,13 @@ final class SchematicPane {
     }
 
     private void deleteSelected() {
+        if (selectedWire != null && workbench.selected() == null) {
+            UUID id = selectedWire;
+            selectedWire = null;
+            workbench.apply(List.of(new DeleteWireOp(id)));
+            workbench.status("Deleted wire (pins stay connected; disconnect pins to change the netlist)");
+            return;
+        }
         ComponentView c = selectedComponent();
         if (c != null) {
             workbench.select(null);
@@ -506,9 +713,11 @@ final class SchematicPane {
 
     private void updateHint() {
         hint.setText(switch (tool) {
-            case SELECT -> "Drag parts to move \u2022 click pins to wire \u2022 R rotate \u2022 Del delete \u2022 wheel zoom";
+            case SELECT -> "Drag parts to move \u2022 click pins to wire \u2022 click a wire to select \u2022 R rotate "
+                    + "\u2022 Del delete \u2022 wheel zoom";
             case PLACE -> "Click to place \u2022 Shift-click places repeatedly \u2022 Esc to stop";
-            case WIRE -> "Click a pin, then another pin \u2022 Esc to cancel";
+            case WIRE -> "Click a pin or wire \u2022 click empty space to bend \u2022 click a pin or wire to finish "
+                    + "\u2022 Backspace undoes a bend \u2022 Esc cancels";
         });
     }
 
@@ -521,6 +730,27 @@ final class SchematicPane {
             return;
         }
         ComponentView c = selectedComponent();
+        if (c == null && selectedWire != null) {
+            for (NetView net : project.nets()) {
+                for (WireView wire : net.wires()) {
+                    if (wire.id().equals(selectedWire)) {
+                        var title = new Label("Wire on " + net.name());
+                        title.setFont(Font.font(15));
+                        var delete = new Button("Delete wire");
+                        delete.setOnAction(e -> deleteSelected());
+                        var rename = new Button("Rename net...");
+                        rename.setOnAction(e -> renameNet(net));
+                        properties.getChildren().addAll(title, new Label(wire.points().size() + " point(s), "
+                                        + (wire.fromPinId() == null ? "free" : "pin") + " start, "
+                                        + (wire.toPinId() == null ? "free" : "pin") + " end"),
+                                new Label(net.pinIds().size() + " pin(s) and " + net.wires().size()
+                                        + " wire(s) on this net"), new HBox(6, delete, rename), new Separator(),
+                                new Label("Wires are drawing only; pin membership defines connectivity."));
+                        return;
+                    }
+                }
+            }
+        }
         if (c == null) {
             var title = new Label(project.name());
             title.setFont(Font.font(15));
@@ -595,6 +825,11 @@ final class SchematicPane {
         properties.getChildren().addAll(title, new Label(c.definitionId() + " v" + c.definitionVersion()
                         + (c.physical() ? "" : " \u2022 virtual (no footprint)")), grid,
                 new HBox(6, apply, rotate, delete), new Separator(), new Label("Pins"));
+        if (c.definitionId().startsWith("project.")) {
+            var editPart = new Button("Edit part " + c.definitionId() + "...");
+            editPart.setOnAction(e -> openPartEditor(c.definitionId()));
+            properties.getChildren().add(3, editPart);
+        }
         for (PinView pin : c.pins()) {
             NetView net = netByPin.get(pin.id());
             var label = new Label(pin.number() + " (" + pin.name() + ") \u2192 " + (net == null ? "unconnected" : net.name()));
@@ -677,10 +912,17 @@ final class SchematicPane {
             }
         }
         if (wireStart != null) {
+            var preview = new ArrayList<double[]>();
+            preview.add(new double[] {wireStart.x(), wireStart.y()});
+            preview.addAll(bends);
+            PinHit target = pinAt(mouseX, mouseY);
+            preview.add(target != null ? new double[] {target.x(), target.y()}
+                    : new double[] {snap(mmX(mouseX)), snap(mmY(mouseY))});
+            var path = WireGeometry.orthogonal(preview);
             g.setStroke(SELECTED);
             g.setLineWidth(1.5);
             g.setLineDashes(6, 4);
-            g.strokeLine(sx(wireStart.x()), sy(wireStart.y()), mouseX, mouseY);
+            stroke(g, path);
             g.setLineDashes();
         }
         if (tool == Tool.PLACE && palette.getSelectionModel().getSelectedItem() != null) {
@@ -694,47 +936,101 @@ final class SchematicPane {
     }
 
     private void drawNets(GraphicsContext g, Map<UUID, double[]> positions) {
-        g.setLineWidth(Math.max(1.2, scale * 0.22));
+        double lineWidth = Math.max(1.2, scale * 0.22);
         g.setFont(Font.font(Math.max(9, Math.min(12, scale * 1.2))));
         for (NetView net : project.nets()) {
-            var points = net.pinIds().stream().map(positions::get).filter(java.util.Objects::nonNull).toList();
-            if (points.isEmpty()) {
-                continue;
+            var paths = new LinkedHashMap<UUID, List<double[]>>();
+            for (WireView wire : net.wires()) {
+                var path = WireGeometry.path(wire, positions);
+                if (path != null) {
+                    paths.put(wire.id(), path);
+                }
+            }
+            var groups = WireGeometry.groups(net, positions, paths);
+            var points = new ArrayList<double[]>();
+            var groupOf = new ArrayList<Integer>();
+            for (int i = 0; i < groups.size(); i++) {
+                for (UUID pin : groups.get(i)) {
+                    points.add(positions.get(pin));
+                    groupOf.add(i);
+                }
+            }
+            g.setLineWidth(lineWidth);
+            for (var entry : paths.entrySet()) {
+                g.setStroke(entry.getKey().equals(selectedWire) ? SELECTED : WIRE);
+                stroke(g, entry.getValue());
             }
             g.setStroke(WIRE);
-            // Prim's minimum spanning tree with Manhattan distance, drawn as L-shaped wires.
-            boolean[] inTree = new boolean[points.size()];
-            double[] best = new double[points.size()];
-            int[] parent = new int[points.size()];
-            java.util.Arrays.fill(best, Double.MAX_VALUE);
-            best[0] = 0;
-            parent[0] = -1;
-            for (int round = 0; round < points.size(); round++) {
-                int next = -1;
-                for (int i = 0; i < points.size(); i++) {
-                    if (!inTree[i] && (next < 0 || best[i] < best[next])) {
-                        next = i;
-                    }
-                }
-                inTree[next] = true;
-                if (parent[next] >= 0) {
-                    double[] a = points.get(parent[next]);
-                    double[] b = points.get(next);
-                    g.strokeLine(sx(a[0]), sy(a[1]), sx(b[0]), sy(a[1]));
-                    g.strokeLine(sx(b[0]), sy(a[1]), sx(b[0]), sy(b[1]));
-                }
-                for (int i = 0; i < points.size(); i++) {
-                    double distance = Math.abs(points.get(i)[0] - points.get(next)[0])
-                            + Math.abs(points.get(i)[1] - points.get(next)[1]);
-                    if (!inTree[i] && distance < best[i]) {
-                        best[i] = distance;
-                        parent[i] = next;
-                    }
+            if (paths.isEmpty()) {
+                drawTree(g, points, groupOf);
+            } else {
+                // Pins not yet joined by drawn wires are shown as a dashed ratsnest.
+                g.setLineWidth(1);
+                g.setLineDashes(4, 4);
+                drawTree(g, points, groupOf);
+                g.setLineDashes();
+                g.setFill(WIRE);
+                double r = Math.max(2.5, scale * 0.45);
+                for (double[] junction : WireGeometry.junctions(List.copyOf(paths.values()))) {
+                    g.fillOval(sx(junction[0]) - r, sy(junction[1]) - r, 2 * r, 2 * r);
                 }
             }
-            double[] first = points.getFirst();
-            g.setFill(Color.web("#2e7d32"));
-            g.fillText(net.name(), sx(first[0]) + 4, sy(first[1]) - 4);
+            double[] first = !points.isEmpty() ? points.getFirst()
+                    : paths.isEmpty() ? null : paths.values().iterator().next().getFirst();
+            if (first != null) {
+                g.setFill(Color.web("#2e7d32"));
+                g.fillText(net.name(), sx(first[0]) + 4, sy(first[1]) - 4);
+            }
+        }
+    }
+
+    private void stroke(GraphicsContext g, List<double[]> path) {
+        double[] xs = new double[path.size()];
+        double[] ys = new double[path.size()];
+        for (int i = 0; i < path.size(); i++) {
+            xs[i] = sx(path.get(i)[0]);
+            ys[i] = sy(path.get(i)[1]);
+        }
+        g.strokePolyline(xs, ys, path.size());
+    }
+
+    /**
+     * Prim's minimum spanning tree with Manhattan distance, drawn as L-shaped segments. Points in the same group are
+     * already joined, so they connect at zero cost and only edges between groups are drawn.
+     */
+    private void drawTree(GraphicsContext g, List<double[]> points, List<Integer> groupOf) {
+        if (points.isEmpty()) {
+            return;
+        }
+        boolean[] inTree = new boolean[points.size()];
+        double[] best = new double[points.size()];
+        int[] parent = new int[points.size()];
+        java.util.Arrays.fill(best, Double.MAX_VALUE);
+        best[0] = 0;
+        parent[0] = -1;
+        for (int round = 0; round < points.size(); round++) {
+            int next = -1;
+            for (int i = 0; i < points.size(); i++) {
+                if (!inTree[i] && (next < 0 || best[i] < best[next])) {
+                    next = i;
+                }
+            }
+            inTree[next] = true;
+            if (parent[next] >= 0 && !groupOf.get(parent[next]).equals(groupOf.get(next))) {
+                double[] a = points.get(parent[next]);
+                double[] b = points.get(next);
+                g.strokeLine(sx(a[0]), sy(a[1]), sx(b[0]), sy(a[1]));
+                g.strokeLine(sx(b[0]), sy(a[1]), sx(b[0]), sy(b[1]));
+            }
+            for (int i = 0; i < points.size(); i++) {
+                double distance = groupOf.get(i).equals(groupOf.get(next)) ? 0
+                        : Math.abs(points.get(i)[0] - points.get(next)[0])
+                        + Math.abs(points.get(i)[1] - points.get(next)[1]);
+                if (!inTree[i] && distance < best[i]) {
+                    best[i] = distance;
+                    parent[i] = next;
+                }
+            }
         }
     }
 

@@ -20,11 +20,11 @@ import net.talaatharb.expanse.schematic.SchematicEditor;
 import net.talaatharb.expanse.simulation.CircuitSimulator;
 import net.talaatharb.expanse.simulation.LogicSimulator;
 import net.talaatharb.expanse.validation.DesignValidator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public final class ProjectService {
-    private static final Logger LOG = LoggerFactory.getLogger(ProjectService.class);
+    private static final DesignViewMapper VIEWS = DesignViewMapper.INSTANCE;
     private final ProjectRepository repository;
     private final ProjectJson json;
     private final ComponentLibrary library;
@@ -46,7 +46,7 @@ public final class ProjectService {
 
     public List<Summary> list(int offset, int limit) {
         Design.require(offset >= 0 && limit > 0 && limit <= 100, "Use offset >= 0 and limit between 1 and 100");
-        return repository.list(offset, limit).stream().map(ProjectService::summary).toList();
+        return repository.list(offset, limit).stream().map(VIEWS::summary).toList();
     }
 
     public Snapshot create(CreateProject request) {
@@ -97,13 +97,77 @@ public final class ProjectService {
         }
     }
 
+    public HistoryView history(UUID id) {
+        Project current = repository.get(id);
+        var history = repository.revision(id, current.revision()).map(ProjectRepository.StoredRevision::history)
+                .orElse(ProjectRepository.History.NONE);
+        Long undo = retained(id, history.undoTo());
+        Long redo = retained(id, history.redoTo());
+        return new HistoryView(id, current.revision(), undo != null, redo != null, undo, redo);
+    }
+
+    /** Restores the content before the latest edit as a new revision; redo can bring the edit back. */
+    public ChangeResult undo(UUID id, HistoryStep request) {
+        return step(id, request.expectedRevision(), true);
+    }
+
+    /** Reapplies the most recently undone edit as a new revision. */
+    public ChangeResult redo(UUID id, HistoryStep request) {
+        return step(id, request.expectedRevision(), false);
+    }
+
+    private Long retained(UUID id, Long revision) {
+        return revision != null && repository.revision(id, revision).isPresent() ? revision : null;
+    }
+
+    /*
+     * Each revision links to the revision undo restores and the one redo restores. Undo at c to t writes a new
+     * revision n with t's content, undo link undo(t) and redo link c; redo at c to t writes n with t's content,
+     * undo link c and redo link redo(t). Ordinary edits link back to their base and clear redo.
+     */
+    private ChangeResult step(UUID id, long expectedRevision, boolean undo) {
+        String action = undo ? "project.undo" : "project.redo";
+        try {
+            Project current = repository.get(id);
+            checkRevision(current, expectedRevision);
+            var history = repository.revision(id, current.revision()).map(ProjectRepository.StoredRevision::history)
+                    .orElse(ProjectRepository.History.NONE);
+            Long targetRevision = undo ? history.undoTo() : history.redoTo();
+            var target = targetRevision == null ? null : repository.revision(id, targetRevision).orElse(null);
+            if (target == null) {
+                throw new DesignException(undo ? "NOTHING_TO_UNDO" : "NOTHING_TO_REDO",
+                        undo ? "There is no earlier edit to undo" : "There is no undone edit to redo",
+                        current.revision());
+            }
+            Project restored = target.project();
+            Project next = new Project(restored.schemaVersion(), id, restored.name(),
+                    Math.incrementExact(current.revision()), current.createdAt(),
+                    Instant.now().isBefore(current.modifiedAt()) ? current.modifiedAt() : Instant.now(),
+                    restored.sheets(), restored.components(), restored.nets(), restored.board(), restored.parts(),
+                    restored.extensions());
+            var links = undo ? new ProjectRepository.History(target.history().undoTo(), current.revision())
+                    : new ProjectRepository.History(current.revision(), target.history().redoTo());
+            repository.replace(next, current.revision(), links);
+            LOG.info("action={} project={} revision={} restored={} outcome=success", action, id, next.revision(),
+                    targetRevision);
+            String change = (undo ? "Undid revision " + current.revision() : "Redid revision " + targetRevision)
+                    + "; restored the content of revision " + targetRevision;
+            return new ChangeResult(id, current.revision(), next.revision(), true, List.of(change), List.of(),
+                    diagnostics(next), snapshot(next));
+        } catch (DesignException e) {
+            LOG.warn("action={} project={} expectedRevision={} outcome=rejected code={}", action, id,
+                    expectedRevision, e.code());
+            throw e;
+        }
+    }
+
     public ValidationReport validate(UUID id) {
         Project project = repository.get(id);
         return new ValidationReport(id, project.revision(), diagnostics(project));
     }
 
     public List<DefinitionView> search(String query) {
-        return library.search(query == null ? "" : query).stream().map(ProjectService::definition).toList();
+        return library.search(query == null ? "" : query).stream().map(VIEWS::definition).toList();
     }
 
     public SimulationReport simulate(UUID id, SimulationRequest request) {
@@ -138,24 +202,20 @@ public final class ProjectService {
     public BoardAnalysis analyzeBoard(UUID id) {
         Project project = repository.get(id);
         var report = boardAnalyzer.analyze(project);
-        return new BoardAnalysis(id, project.revision(), report.pads().stream().map(ProjectService::pad).toList(),
+        return new BoardAnalysis(id, project.revision(), report.pads().stream().map(VIEWS::pad).toList(),
                 report.airwires().stream().map(a -> new AirwireView(a.netId(), a.netName(), a.from().pinId(),
                         a.from().reference() + "." + a.from().pinNumber(), a.from().xMm(), a.from().yMm(),
                         a.to().pinId(), a.to().reference() + "." + a.to().pinNumber(), a.to().xMm(),
                         a.to().yMm())).toList(),
-                report.findings().stream().map(f -> new Diagnostic(f.code(), f.severity(), f.message(),
-                        f.affectedIds())).toList());
+                report.findings().stream().map(VIEWS::diagnostic).toList());
     }
 
     public AssemblyView assembly(UUID id) {
         Project project = repository.get(id);
         var scene = assemblyBuilder.build(project);
         return new AssemblyView(id, project.revision(), scene.boardWidthMm(), scene.boardHeightMm(),
-                scene.boardThicknessMm(), scene.maxHeightMm(), scene.solids().stream().map(s -> new SolidView(
-                s.id(), s.ownerId(), s.label(), s.role(), s.shape(), s.xMm(), s.yMm(), s.zMm(), s.sizeXMm(),
-                s.sizeYMm(), s.sizeZMm(), s.rotationDeg(), s.color())).toList(),
-                scene.findings().stream().map(f -> new Diagnostic(f.code(), f.severity(), f.message(),
-                        f.affectedIds())).toList());
+                scene.boardThicknessMm(), scene.maxHeightMm(), scene.solids().stream().map(VIEWS::solid).toList(),
+                scene.findings().stream().map(VIEWS::diagnostic).toList());
     }
 
     public Document exportProject(UUID id) {
@@ -179,7 +239,7 @@ public final class ProjectService {
         Project copy = json.read(text);
         Instant now = Instant.now();
         copy = new Project(copy.schemaVersion(), copy.id(), copy.name(), 0, now, now, copy.sheets(),
-                copy.components(), copy.nets(), copy.board(), copy.extensions());
+                copy.components(), copy.nets(), copy.board(), copy.parts(), copy.extensions());
         repository.insert(copy);
         LOG.info("action=project.import_copy source={} project={} outcome=success", source.id(), copy.id());
         return snapshot(copy);
@@ -196,7 +256,8 @@ public final class ProjectService {
         Project next = new Project(incoming.schemaVersion(), id, incoming.name(),
                 Math.incrementExact(current.revision()), incoming.createdAt(),
                 Instant.now().isBefore(incoming.createdAt()) ? incoming.createdAt() : Instant.now(),
-                incoming.sheets(), incoming.components(), incoming.nets(), incoming.board(), incoming.extensions());
+                incoming.sheets(), incoming.components(), incoming.nets(), incoming.board(), incoming.parts(),
+                incoming.extensions());
         repository.replace(next, current.revision());
         LOG.info("action=project.replace_document project={} revision={} outcome=success", id, next.revision());
         return snapshot(next);
@@ -210,11 +271,15 @@ public final class ProjectService {
     public List<Capability> capabilities() {
         return List.of(
                 new Capability("project.lifecycle", true,
-                        "Revisioned projects, canonical JSON 0.2 import/export with 0.1 migration"),
+                        "Revisioned projects, canonical JSON 0.3 import/export with 0.1/0.2 migration"),
                 new Capability("schematic.basic", true,
                         "R, L, C, sources, rails, ground, switches, BJTs and MOSFETs with typed parameters"),
+                new Capability("schematic.wires", true, "Wire graphics with bends, free ends and junctions"),
+                new Capability("parts.custom", true, "Project-local parts with pins, parameters, pads and bodies"),
                 new Capability("design.validation", true, "Connectivity and electrical rule checks"),
                 new Capability("changes.transactional", true, "Preview and apply batched operations atomically"),
+                new Capability("history.undo", true, "Server-side undo/redo of the last "
+                        + ProjectRepository.HISTORY_LIMIT + " revisions, shared by every client"),
                 new Capability("simulation", true, CircuitSimulator.ENGINE + " " + CircuitSimulator.VERSION
                         + ": DC operating point and transient (backward Euler), limited device models, "
                         + "behavioural logic gates"),
@@ -232,8 +297,7 @@ public final class ProjectService {
     }
 
     private List<Diagnostic> diagnostics(Project project) {
-        return validator.validate(project).stream()
-                .map(f -> new Diagnostic(f.code(), f.severity(), f.message(), f.affectedIds())).toList();
+        return validator.validate(project).stream().map(VIEWS::diagnostic).toList();
     }
 
     private static void checkRevision(Project current, long expected) {
@@ -251,54 +315,15 @@ public final class ProjectService {
             ids.add(c.id());
             c.pins().forEach(pin -> ids.add(pin.id()));
         });
-        p.nets().forEach(n -> ids.add(n.id()));
+        p.nets().forEach(n -> {
+            ids.add(n.id());
+            n.wires().forEach(w -> ids.add(w.id()));
+        });
         p.board().traces().forEach(t -> ids.add(t.id()));
         return ids;
     }
 
-    private static Summary summary(Project project) {
-        return new Summary(project.id(), project.name(), project.revision(),
-                project.components().size(), project.nets().size());
-    }
-
-    private static ParameterView parameter(Design.ParameterDefinition p) {
-        return new ParameterView(p.name(), p.unit(), p.defaultValue(), p.allowedValues());
-    }
-
-    private static DefinitionView definition(Design.Definition d) {
-        return new DefinitionView(d.id(), d.version(), d.name(), d.kind(),
-                d.pins().stream().map(p -> new PinView(null, p.number(), p.name(), p.required())).toList(),
-                d.parameters().stream().map(ProjectService::parameter).toList(), true, d.footprint().physical(), true);
-    }
-
-    private static PadView pad(PcbGeometry.PlacedPad p) {
-        return new PadView(p.componentId(), p.reference(), p.pinId(), p.pinNumber(), p.netId(), p.xMm(), p.yMm(),
-                p.widthMm(), p.heightMm(), p.drillMm());
-    }
-
-    public static Snapshot snapshot(Project p) {
-        var board = p.board();
-        var placements = board.placements().stream().map(pl -> {
-            var c = p.component(pl.componentId());
-            return new PlacementView(pl.componentId(), c.reference(), pl.xMm(), pl.yMm(), pl.rotation(),
-                    c.definition().footprint().courtyardWidthMm(), c.definition().footprint().courtyardHeightMm());
-        }).toList();
-        var traces = board.traces().stream().map(t -> new TraceView(t.id(), t.netId(), t.layer(), t.widthMm(),
-                t.points().stream().map(pt -> new PointView(pt.xMm(), pt.yMm())).toList())).toList();
-        return new Snapshot(p.id(), p.name(), p.revision(),
-                p.sheets().stream().map(s -> new SheetView(s.id(), s.name())).toList(),
-                p.components().stream().map(c -> new ComponentView(c.id(), c.sheetId(), c.reference(),
-                        c.definition().id(), c.definition().version(), c.definition().name(), c.definition().kind(),
-                        c.position().x(), c.position().y(), c.rotation(), new TreeMap<>(c.properties()),
-                        c.definition().parameters().stream().map(ProjectService::parameter).toList(),
-                        c.definition().footprint().physical(),
-                        c.pins().stream().map(pin -> {
-                            var definition = c.definition().pins().stream()
-                                    .filter(d -> d.number().equals(pin.number())).findFirst().orElseThrow();
-                            return new PinView(pin.id(), pin.number(), definition.name(), definition.required());
-                        }).toList())).toList(),
-                p.nets().stream().map(n -> new NetView(n.id(), n.name(), n.pinIds())).toList(),
-                new BoardView(board.widthMm(), board.heightMm(), board.thicknessMm(), board.clearanceMm(),
-                        placements, traces, PcbGeometry.pads(p).stream().map(ProjectService::pad).toList()));
+    private static Snapshot snapshot(Project project) {
+        return VIEWS.snapshot(project);
     }
 }

@@ -11,11 +11,15 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class Design {
-    public static final String SCHEMA_VERSION = "0.2";
+    public static final String SCHEMA_VERSION = "0.3";
+    /** Kind of user-defined parts without a simulation model; drawn as a box with pins on both sides. */
+    public static final String GENERIC_KIND = "generic";
+    /** Project-local part definitions use this ID prefix, so they never collide with built-in definitions. */
+    public static final String PROJECT_PART_PREFIX = "project.";
     public static final Set<String> KINDS = Set.of("resistor", "capacitor", "inductor", "voltage-source",
             "power-rail", "ground", "switch", "npn", "pnp", "nmos", "pmos", "logic-input", "logic-clock", "logic-and",
             "logic-or", "logic-nand", "logic-nor", "logic-xor", "logic-not", "logic-74hc00", "logic-74hc04",
-            "logic-74hc08", "logic-74hc32", "logic-74hc86", "logic-74hc74");
+            "logic-74hc08", "logic-74hc32", "logic-74hc86", "logic-74hc74", GENERIC_KIND);
     public static final Set<Integer> ROTATIONS = Set.of(0, 90, 180, 270);
     public static final Set<String> LAYERS = Set.of("top", "bottom");
     private static final Pattern COLOR = Pattern.compile("^#[0-9a-fA-F]{6}$");
@@ -182,13 +186,44 @@ public final class Design {
         }
     }
 
-    public record Net(UUID id, String name, List<UUID> pinIds) {
+    /**
+     * Schematic wire graphics: a polyline in sheet millimetres. Each end is either attached to a member pin of the
+     * owning net ({@code fromPinId}/{@code toPinId}, following the pin when its part moves) or free, in which case
+     * the first/last entry of {@code points} is the end (for example a T-junction on another wire). The remaining
+     * points are bends. Connectivity is defined by the net's pins alone; wires are graphics only.
+     */
+    public record Wire(UUID id, UUID fromPinId, UUID toPinId, List<Point> points) {
+        public Wire {
+            Objects.requireNonNull(id, "Wire ID");
+            points = List.copyOf(points);
+            require(points.size() <= 1000, "A wire supports at most 1000 points");
+            int ends = (fromPinId == null ? 0 : 1) + (toPinId == null ? 0 : 1);
+            require(ends + points.size() >= 2, "A wire requires two ends");
+            require(fromPinId == null || !fromPinId.equals(toPinId), "A wire cannot start and end on the same pin");
+        }
+
+        public boolean touches(UUID pinId) {
+            return pinId.equals(fromPinId) || pinId.equals(toPinId);
+        }
+    }
+
+    public record Net(UUID id, String name, List<UUID> pinIds, List<Wire> wires) {
         public Net {
             Objects.requireNonNull(id, "Net ID");
             name = text(name, "Net name");
             pinIds = List.copyOf(pinIds);
+            wires = List.copyOf(wires);
             require(pinIds.size() >= 2, "A net requires at least two pins");
             unique(pinIds, "net member");
+            require(wires.size() <= 10_000, "A net supports at most 10000 wires");
+        }
+
+        public Net(UUID id, String name, List<UUID> pinIds) {
+            this(id, name, pinIds, List.of());
+        }
+
+        public Net withWires(List<Wire> nextWires) {
+            return new Net(id, name, pinIds, nextWires);
         }
     }
 
@@ -240,9 +275,11 @@ public final class Design {
         }
     }
 
+    /** {@code parts} holds project-local definitions (custom parts) that can be placed like library parts. */
     public record Project(String schemaVersion, UUID id, String name, long revision,
                           Instant createdAt, Instant modifiedAt, List<Sheet> sheets,
-                          List<Component> components, List<Net> nets, Board board, Map<String, String> extensions) {
+                          List<Component> components, List<Net> nets, Board board, List<Definition> parts,
+                          Map<String, String> extensions) {
         public Project {
             if (!SCHEMA_VERSION.equals(schemaVersion)) {
                 throw new DesignException("UNSUPPORTED_SCHEMA", "Unsupported project schema: " + schemaVersion);
@@ -257,7 +294,14 @@ public final class Design {
             sheets = List.copyOf(sheets);
             components = List.copyOf(components);
             nets = List.copyOf(nets);
+            parts = List.copyOf(parts);
             extensions = Map.copyOf(extensions);
+            require(parts.size() <= 1_000, "A project supports at most 1000 custom parts");
+            unique(parts.stream().map(Definition::id).toList(), "custom part ID");
+            for (var part : parts) {
+                require(part.id().startsWith(PROJECT_PART_PREFIX) && part.id().length() > PROJECT_PART_PREFIX.length(),
+                        "Custom part IDs must start with " + PROJECT_PART_PREFIX);
+            }
             require(!sheets.isEmpty(), "A project requires a sheet");
             require(components.size() <= 5_000 && nets.size() <= 10_000, "Project exceeds supported object counts");
             Set<UUID> ids = new HashSet<>();
@@ -287,6 +331,12 @@ public final class Design {
                     require(pinIds.contains(pinId), "Net references a missing pin");
                     require(connected.add(pinId), "A pin cannot belong to multiple nets");
                 }
+                for (var wire : net.wires()) {
+                    require(ids.add(wire.id()), "Duplicate entity ID");
+                    require((wire.fromPinId() == null || net.pinIds().contains(wire.fromPinId()))
+                                    && (wire.toPinId() == null || net.pinIds().contains(wire.toPinId())),
+                            "Wire ends must attach to pins of their net");
+                }
                 long sheetCount = components.stream()
                         .filter(c -> c.pins().stream().anyMatch(p -> net.pinIds().contains(p.id())))
                         .map(Component::sheetId).distinct().count();
@@ -307,28 +357,35 @@ public final class Design {
         public static Project create(String name) {
             Instant now = Instant.now();
             return new Project(SCHEMA_VERSION, UUID.randomUUID(), name, 0, now, now,
-                    List.of(new Sheet(UUID.randomUUID(), "Main")), List.of(), List.of(), Board.empty(), Map.of());
+                    List.of(new Sheet(UUID.randomUUID(), "Main")), List.of(), List.of(), Board.empty(), List.of(),
+                    Map.of());
         }
 
         public Project edited(List<Component> nextComponents, List<Net> nextNets, Board nextBoard) {
             return new Project(schemaVersion, id, name, Math.incrementExact(revision), createdAt,
-                    Instant.now(), sheets, nextComponents, nextNets, nextBoard, extensions);
+                    Instant.now(), sheets, nextComponents, nextNets, nextBoard, parts, extensions);
         }
 
         public Project renamed(String nextName) {
             return new Project(schemaVersion, id, nextName, Math.incrementExact(revision), createdAt,
-                    Instant.now(), sheets, components, nets, board, extensions);
+                    Instant.now(), sheets, components, nets, board, parts, extensions);
         }
 
         /** Collapses any number of intermediate edits into a single revision after {@code baseRevision}. */
         public Project committed(long baseRevision) {
             return new Project(schemaVersion, id, name, Math.incrementExact(baseRevision), createdAt,
-                    Instant.now(), sheets, components, nets, board, extensions);
+                    Instant.now(), sheets, components, nets, board, parts, extensions);
         }
 
         public Project withBoard(Board nextBoard) {
             return new Project(schemaVersion, id, name, Math.incrementExact(revision), createdAt,
-                    Instant.now(), sheets, components, nets, nextBoard, extensions);
+                    Instant.now(), sheets, components, nets, nextBoard, parts, extensions);
+        }
+
+        public Project withParts(List<Definition> nextParts, List<Component> nextComponents, List<Net> nextNets,
+                                 Board nextBoard) {
+            return new Project(schemaVersion, id, name, Math.incrementExact(revision), createdAt,
+                    Instant.now(), sheets, nextComponents, nextNets, nextBoard, nextParts, extensions);
         }
 
         public Component component(UUID componentId) {

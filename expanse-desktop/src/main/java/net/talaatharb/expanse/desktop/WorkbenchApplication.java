@@ -25,6 +25,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 import javafx.util.Duration;
@@ -36,6 +38,7 @@ import net.talaatharb.expanse.dto.ApiModels.*;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.core.env.StandardEnvironment;
 
 /**
  * Desktop shell: menus, the open-project lifecycle (new, open, save, save as) and the schematic, simulation, PCB and
@@ -48,9 +51,13 @@ public final class WorkbenchApplication extends Application implements Workbench
         thread.setDaemon(true);
         return thread;
     });
-    private final LocalServer localServer = new LocalServer();
-    private ConfigurableApplicationContext context;
+    private LocalServer localServer = new LocalServer();
+    private volatile ConfigurableApplicationContext context;
     private WorkbenchApi api;
+    private Exception startupFailure;
+    private final HealthMonitor health = new HealthMonitor();
+    private final Circle healthDot = new Circle(5, Color.GRAY);
+    private final Label healthLabel = new Label("server", healthDot);
     private ProjectSession session;
     private Stage stage;
     private BorderPane root;
@@ -69,26 +76,58 @@ public final class WorkbenchApplication extends Application implements Workbench
     private int pending;
 
     /** Session state captured on the worker thread and published to the FX thread. */
-    private record State(Snapshot snapshot, Path file, boolean dirty, List<Diagnostic> diagnostics) {
+    private record State(Snapshot snapshot, Path file, boolean dirty, List<Diagnostic> diagnostics,
+                         HistoryView history) {
     }
 
+    private final MenuItem undoItem = item("Undo", "Shortcut+Z", () -> step(true));
+    private final MenuItem redoItem = item("Redo", "Shortcut+Y", () -> step(false));
+
     @Override
-    public void init() throws Exception {
+    public void init() {
         try {
-            context = new SpringApplicationBuilder(DesktopConfiguration.class).web(WebApplicationType.NONE)
+            connect();
+        } catch (Exception e) {
+            // start() offers File > Settings instead of failing to launch with an unusable configuration.
+            startupFailure = e;
+        }
+    }
+
+    /**
+     * Builds the client context from the command line, environment and settings file, then connects (in local mode,
+     * starting a child server when none is listening). Fields change only on success.
+     */
+    private void connect() throws Exception {
+        ConfigurableApplicationContext next = null;
+        var server = new LocalServer();
+        try {
+            next = new SpringApplicationBuilder(DesktopConfiguration.class).web(WebApplicationType.NONE)
                     .listeners((org.springframework.context.ApplicationListener<
                             org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent>)
-                            event -> LocalServer.provisionToken(event.getEnvironment()))
+                            event -> {
+                                DesktopSettings.load(event.getEnvironment());
+                                LocalServer.provisionToken(event.getEnvironment());
+                            })
                     .run(getParameters().getRaw().toArray(String[]::new));
-            api = context.getBean(WorkbenchClient.class);
-            localServer.connect(context.getEnvironment(), api);
-            session = new ProjectSession(api);
+            WorkbenchApi client = next.getBean(WorkbenchClient.class);
+            server.connect(next.getEnvironment(), client);
+            context = next;
+            api = client;
+            localServer = server;
+            session = new ProjectSession(client);
         } catch (Exception e) {
-            localServer.close();
-            if (context != null) {
-                context.close();
+            server.close();
+            if (next != null) {
+                next.close();
             }
             throw e;
+        }
+    }
+
+    private void disconnect() {
+        localServer.close();
+        if (context != null) {
+            context.close();
         }
     }
 
@@ -109,12 +148,20 @@ public final class WorkbenchApplication extends Application implements Workbench
         busy.setVisible(false);
         var spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        var statusBar = new HBox(8, busy, status, spacer, projectLabel);
+        healthLabel.setTooltip(new Tooltip("Checking the server..."));
+        healthLabel.setOnMouseClicked(e -> openSettings());
+        healthLabel.setCursor(javafx.scene.Cursor.HAND);
+        var statusBar = new HBox(8, busy, status, spacer, projectLabel, new Separator(javafx.geometry.Orientation.VERTICAL),
+                healthLabel);
+        statusBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
         statusBar.setPadding(new Insets(3, 8, 3, 8));
         root = new BorderPane(tabs);
         root.setTop(menuBar());
         root.setBottom(statusBar);
-        stage.setScene(new Scene(root, 1400, 900));
+        var scene = new Scene(root, 1400, 900);
+        scene.getAccelerators().put(KeyCombination.keyCombination("Shortcut+Shift+Z"), () -> step(false));
+        stage.setScene(scene);
+        updateHistory(null);
         stage.setMaximized(true);
         stage.setOnCloseRequest(e -> {
             if (!confirmDiscard("closing")) {
@@ -123,10 +170,12 @@ public final class WorkbenchApplication extends Application implements Workbench
         });
         updateTitle();
         stage.show();
-        run(() -> api.search(""), definitions -> {
-            schematic.setLibrary(definitions);
-            status("Library: " + definitions.size() + " parts");
-        });
+        health.start(this::serverUrl, h -> Platform.runLater(() -> showHealth(h)));
+        if (startupFailure != null) {
+            recoverStartup(startupFailure);
+            return;
+        }
+        connected();
         String open = property("expanse.open");
         if (open != null && !open.isBlank()) {
             openFile(Path.of(open), true);
@@ -138,9 +187,136 @@ public final class WorkbenchApplication extends Application implements Workbench
     }
 
     private String property(String name) {
-        return context.getEnvironment().getProperty(name);
+        return context == null ? null : context.getEnvironment().getProperty(name);
     }
 
+    private String serverUrl() {
+        String url = property(DesktopSettings.SERVER_URL);
+        if (url == null) {
+            var settings = DesktopSettings.file(new StandardEnvironment());
+            url = Files.isRegularFile(settings) ? DesktopSettings.read(settings).serverUrl() : DesktopSettings.DEFAULT_URL;
+        }
+        return url;
+    }
+
+    /** Runs once a server connection is established: loads the parts library into the palette. */
+    private void connected() {
+        run(() -> api.search(""), definitions -> {
+            schematic.setLibrary(definitions);
+            status("Library: " + definitions.size() + " parts");
+        });
+        health.refresh(this::serverUrl, h -> Platform.runLater(() -> showHealth(h)));
+    }
+
+    private void showHealth(HealthMonitor.Health result) {
+        String mode = context == null ? "not connected" : property(DesktopSettings.MODE) == null ? "local"
+                : property(DesktopSettings.MODE);
+        healthDot.setFill(switch (result.status()) {
+            case UP -> Color.web("#2e9d4c");
+            case DEGRADED -> Color.web("#e0a100");
+            case UNREACHABLE -> Color.web("#d03a2f");
+        });
+        healthLabel.setText(mode + " server");
+        healthLabel.getTooltip().setText(serverUrl() + "\nHealth: " + result.detail() + " (checked "
+                + java.time.LocalTime.now().withNano(0) + ", every " + HealthMonitor.INTERVAL.toSeconds()
+                + " s)\nClick to change the server settings.");
+    }
+
+    private void recoverStartup(Exception failure) {
+        var settings = new ButtonType("Settings...", ButtonBar.ButtonData.OK_DONE);
+        var alert = new Alert(Alert.AlertType.ERROR, "Expanse Design could not connect to its server:\n\n"
+                + message(failure) + "\n\nCheck the connection settings, or exit.", settings, ButtonType.CLOSE);
+        alert.setHeaderText("No server connection");
+        alert.initOwner(stage);
+        alert.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
+        if (alert.showAndWait().orElse(ButtonType.CLOSE) == settings) {
+            openSettings();
+        } else {
+            Platform.exit();
+        }
+    }
+
+    /** File > Settings: saves the settings file and optionally reconnects in place. */
+    private void openSettings() {
+        var environment = context == null ? new StandardEnvironment() : context.getEnvironment();
+        Path file = DesktopSettings.file(environment);
+        var shown = context != null ? DesktopSettings.effective(environment)
+                : Files.isRegularFile(file) ? DesktopSettings.read(file) : new DesktopSettings.Values(null, null, null, null);
+        var choice = SettingsDialog.show(stage, shown, file, health);
+        if (choice.isEmpty()) {
+            if (context == null) {
+                Platform.exit();
+            }
+            return;
+        }
+        byte[] previous;
+        try {
+            previous = Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+            DesktopSettings.write(file, choice.get().values());
+        } catch (IOException e) {
+            error("Could not save the settings: " + e.getMessage());
+            return;
+        }
+        if (!choice.get().reconnect() && context != null) {
+            status("Settings saved to " + file + "; they apply at the next start or reconnect");
+            return;
+        }
+        if (context != null && !confirmDiscard("reconnecting")) {
+            return;
+        }
+        reconnect(file, previous);
+    }
+
+    /** Swaps the server connection; on failure restores the previous settings file and connection. */
+    private void reconnect(Path file, byte[] previousSettings) {
+        Path reopen = currentFile;
+        boolean wasConnected = context != null;
+        run(() -> {
+            if (wasConnected) {
+                disconnect();
+            }
+            try {
+                connect();
+                return null;
+            } catch (Exception failure) {
+                if (previousSettings != null) {
+                    Files.write(file, previousSettings);
+                } else {
+                    Files.deleteIfExists(file);
+                }
+                if (wasConnected) {
+                    try {
+                        connect();
+                    } catch (Exception again) {
+                        failure.addSuppressed(again);
+                        context = null;
+                    }
+                } else {
+                    context = null;
+                }
+                return failure;
+            }
+        }, failure -> {
+            if (failure != null) {
+                health.refresh(this::serverUrl, h -> Platform.runLater(() -> showHealth(h)));
+                String restored = context == null ? "There is no server connection; open File > Settings to try again."
+                        : "The previous settings and connection were restored.";
+                error("Could not connect with the new settings: " + message(failure) + "\n\n" + restored);
+                if (context == null) {
+                    recoverStartup(failure);
+                }
+                return;
+            }
+            startupFailure = null;
+            current = null;
+            publish(new State(null, null, false, null, null));
+            connected();
+            status("Connected to " + serverUrl());
+            if (reopen != null && Files.isRegularFile(reopen)) {
+                openFile(reopen, false);
+            }
+        });
+    }
     private static Tab tab(String name, javafx.scene.Node content) {
         var tab = new Tab(name, content);
         tab.setClosable(false);
@@ -174,8 +350,11 @@ public final class WorkbenchApplication extends Application implements Workbench
                 Platform.exit();
             }
         });
+        var settings = item("Settings...", "Shortcut+Comma", this::openSettings);
         var file = new Menu("File", null, newProject, open, openServer, new SeparatorMenuItem(), save, saveAs,
-                new SeparatorMenuItem(), reload, close, new SeparatorMenuItem(), exit);
+                new SeparatorMenuItem(), reload, close, new SeparatorMenuItem(), settings, new SeparatorMenuItem(), exit);
+
+        var edit = new Menu("Edit", null, undoItem, redoItem);
 
         var rename = item("Rename project...", null, this::renameProject);
         var validate = item("Validate", "F7", () -> {
@@ -187,10 +366,14 @@ public final class WorkbenchApplication extends Application implements Workbench
             simulation.run();
         });
         var sync = item("Sync board from schematic", null, () -> apply(List.of(new SyncBoardOp())));
-        var design = new Menu("Design", null, rename, validate, simulate, sync);
+        var parts = item("Part editor...", "Shortcut+E", () -> {
+            tabs.getSelectionModel().select(0);
+            schematic.openPartEditor(null);
+        });
+        var design = new Menu("Design", null, rename, validate, simulate, sync, new SeparatorMenuItem(), parts);
 
         var about = item("About and MCP setup", null, this::about);
-        return new MenuBar(file, design, new Menu("Help", null, about));
+        return new MenuBar(file, edit, design, new Menu("Help", null, about));
     }
 
     private static MenuItem item(String text, String accelerator, Runnable action) {
@@ -307,13 +490,50 @@ public final class WorkbenchApplication extends Application implements Workbench
 
     /** Must run on the worker thread. */
     private State state(List<Diagnostic> diagnostics) {
-        return new State(session.snapshot(), session.file(), session.dirty(), diagnostics);
+        HistoryView history = null;
+        try {
+            history = session.history();
+        } catch (RuntimeException e) {
+            // Undo stays disabled when the server cannot report history (for example an older server).
+        }
+        return new State(session.snapshot(), session.file(), session.dirty(), diagnostics, history);
+    }
+
+    /** Undo or redo the latest edit of the open project, whoever made it (this app, another client or MCP). */
+    private void step(boolean undo) {
+        if (current == null || undoItem.isDisable() && undo || redoItem.isDisable() && !undo) {
+            return;
+        }
+        run(() -> {
+            ChangeResult result = undo ? session.undo() : session.redo();
+            return java.util.Map.entry(result.changes().getFirst(), state(result.diagnostics()));
+        }, done -> {
+            publish(done.getValue());
+            status(done.getKey());
+        }, failure -> {
+            run(() -> state(null), this::publish);
+            if (!(failure instanceof ConnectorException e && "REVISION_CONFLICT".equals(e.error().code()))) {
+                error(message(failure));
+            } else {
+                status("The project changed on the server; the latest revision has been loaded");
+            }
+        });
+    }
+
+    private void updateHistory(HistoryView history) {
+        undoItem.setDisable(history == null || !history.canUndo());
+        redoItem.setDisable(history == null || !history.canRedo());
+        undoItem.setText(history != null && history.canUndo() ? "Undo (restore revision " + history.undoRevision()
+                + ")" : "Undo");
+        redoItem.setText(history != null && history.canRedo() ? "Redo (restore revision " + history.redoRevision()
+                + ")" : "Redo");
     }
 
     private void publish(State state) {
         boolean newProject = state.snapshot() == null || current == null || !current.id().equals(state.snapshot().id());
         current = state.snapshot();
         currentFile = state.file();
+        updateHistory(state.history());
         dirty = state.dirty();
         if (newProject) {
             selected = null;
@@ -577,7 +797,8 @@ public final class WorkbenchApplication extends Application implements Workbench
     }
 
     private void about() {
-        String server = context.getEnvironment().getProperty("expanse.server-url", "http://127.0.0.1:8765");
+        var environment = context == null ? new StandardEnvironment() : context.getEnvironment();
+        String server = serverUrl();
         var text = new TextArea("""
                 Expanse Design %s
 
@@ -597,7 +818,7 @@ public final class WorkbenchApplication extends Application implements Workbench
                 with a revision conflict and the window reloads the latest revision (File > Reload, F5).
                 """.formatted(getClass().getPackage().getImplementationVersion() == null ? "(development)"
                 : getClass().getPackage().getImplementationVersion(), server, server,
-                LocalServer.dataDirectory(context.getEnvironment()).resolve(LocalServer.TOKEN_FILE)));
+                LocalServer.dataDirectory(environment).resolve(LocalServer.TOKEN_FILE)));
         text.setEditable(false);
         text.setWrapText(true);
         text.setPrefSize(640, 320);
@@ -671,9 +892,7 @@ public final class WorkbenchApplication extends Application implements Workbench
     @Override
     public void stop() {
         worker.shutdownNow();
-        localServer.close();
-        if (context != null) {
-            context.close();
-        }
+        health.close();
+        disconnect();
     }
 }

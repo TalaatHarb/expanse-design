@@ -16,6 +16,7 @@ import net.talaatharb.expanse.domain.Design.Pin;
 import net.talaatharb.expanse.domain.Design.Position;
 import net.talaatharb.expanse.domain.Design.Project;
 import net.talaatharb.expanse.domain.Design.Trace;
+import net.talaatharb.expanse.domain.Design.Wire;
 import net.talaatharb.expanse.domain.DesignException;
 
 /** Pure schematic commands. Every method returns a new, fully validated project at the next revision. */
@@ -80,7 +81,8 @@ public final class SchematicEditor {
         var nets = new ArrayList<>(project.nets());
         nets.removeAll(merged);
         UUID id = merged.isEmpty() ? UUID.randomUUID() : merged.getFirst().id();
-        nets.add(new Net(id, name, members.stream().sorted().toList()));
+        nets.add(new Net(id, name, members.stream().sorted().toList(),
+                merged.stream().flatMap(n -> n.wires().stream()).toList()));
         Set<UUID> mergedIds = new HashSet<>(merged.stream().map(Net::id).toList());
         var traces = project.board().traces().stream().map(t -> mergedIds.contains(t.netId())
                 ? new Trace(t.id(), id, t.layer(), t.widthMm(), t.points()) : t).toList();
@@ -96,15 +98,89 @@ public final class SchematicEditor {
 
     public Project renameNet(Project project, UUID netId, String name) {
         require(project.nets().stream().anyMatch(n -> n.id().equals(netId)), "NET_NOT_FOUND", "Net not found: " + netId);
-        var nets = project.nets().stream().map(n -> n.id().equals(netId) ? new Net(n.id(), name, n.pinIds()) : n).toList();
+        var nets = project.nets().stream().map(n -> n.id().equals(netId) ? new Net(n.id(), name, n.pinIds(), n.wires()) : n).toList();
         return project.edited(project.components(), nets, project.board());
+    }
+
+    /** Adds wire graphics to an existing net. Every attached wire end must be a pin of that net. */
+    public Project addWire(Project project, UUID netId, Wire wire) {
+        require(project.nets().stream().anyMatch(n -> n.id().equals(netId)), "NET_NOT_FOUND", "Net not found: " + netId);
+        var nets = project.nets().stream().map(n -> {
+            if (!n.id().equals(netId)) {
+                return n;
+            }
+            var wires = new ArrayList<>(n.wires());
+            wires.add(wire);
+            return n.withWires(wires);
+        }).toList();
+        return project.edited(project.components(), nets, project.board());
+    }
+
+    /** Removes wire graphics only; the net's connectivity is unchanged. */
+    public Project deleteWire(Project project, UUID wireId) {
+        require(project.nets().stream().anyMatch(n -> n.wires().stream().anyMatch(w -> w.id().equals(wireId))),
+                "WIRE_NOT_FOUND", "Wire not found: " + wireId);
+        var nets = project.nets().stream().map(n -> n.wires().stream().anyMatch(w -> w.id().equals(wireId))
+                ? n.withWires(n.wires().stream().filter(w -> !w.id().equals(wireId)).toList()) : n).toList();
+        return project.edited(project.components(), nets, project.board());
+    }
+
+    /**
+     * Stores the project's custom parts and re-pins every instance of {@code definition} to it. Pin IDs are kept by
+     * pin number, pins that no longer exist leave their nets (dropping attached wires), property values that remain
+     * valid are kept and board placements are dropped when the footprint becomes schematic-only.
+     */
+    public Project redefine(Project project, List<Definition> parts, Definition definition) {
+        Set<UUID> removedPins = new HashSet<>();
+        Set<UUID> unplaced = new HashSet<>();
+        var components = project.components().stream().map(c -> {
+            if (!c.definition().id().equals(definition.id())) {
+                return c;
+            }
+            Map<String, UUID> byNumber = new HashMap<>();
+            c.pins().forEach(p -> byNumber.put(p.number(), p.id()));
+            var pins = definition.pins().stream().map(d -> new Pin(byNumber.getOrDefault(d.number(), UUID.randomUUID()),
+                    d.number())).toList();
+            Set<String> kept = new HashSet<>(definition.pins().stream().map(Design.PinDefinition::number).toList());
+            c.pins().stream().filter(p -> !kept.contains(p.number())).forEach(p -> removedPins.add(p.id()));
+            Map<String, String> values = new HashMap<>(definition.defaults());
+            for (var parameter : definition.parameters()) {
+                String old = c.properties().get(parameter.name());
+                if (old != null && valid(parameter, old)) {
+                    values.put(parameter.name(), old);
+                }
+            }
+            if (!definition.footprint().physical()) {
+                unplaced.add(c.id());
+            }
+            return new Component(c.id(), c.sheetId(), c.reference(), definition, c.position(), c.rotation(), values,
+                    pins);
+        }).toList();
+        var nets = shrink(project.nets(), removedPins);
+        Set<UUID> netIds = new HashSet<>(nets.stream().map(Net::id).toList());
+        var placements = project.board().placements().stream().filter(p -> !unplaced.contains(p.componentId()))
+                .toList();
+        var traces = project.board().traces().stream().filter(t -> netIds.contains(t.netId())).toList();
+        return project.withParts(parts, components, nets, project.board().with(placements, traces));
+    }
+
+    private static boolean valid(Design.ParameterDefinition parameter, String value) {
+        try {
+            parameter.check(value);
+            return true;
+        } catch (DesignException e) {
+            return false;
+        }
     }
 
     private static List<Net> shrink(List<Net> nets, Set<UUID> removedPins) {
         return nets.stream().map(n -> {
             var remaining = n.pinIds().stream().filter(p -> !removedPins.contains(p)).toList();
-            return remaining.size() == n.pinIds().size() ? n
-                    : remaining.size() < 2 ? null : new Net(n.id(), n.name(), remaining);
+            if (remaining.size() == n.pinIds().size()) {
+                return n;
+            }
+            return remaining.size() < 2 ? null : new Net(n.id(), n.name(), remaining, n.wires().stream()
+                    .filter(w -> removedPins.stream().noneMatch(w::touches)).toList());
         }).filter(n -> n != null).toList();
     }
 

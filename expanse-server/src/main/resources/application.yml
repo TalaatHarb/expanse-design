@@ -17,3 +17,26 @@ spring:
       fail-on-null-for-primitives: true
   flyway:
     enabled: true
+# Anonymous liveness for clients and orchestrators: status only, never component details.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  info:
+    java:
+      enabled: true
+# OpenAPI document at /v3/api-docs, Swagger UI at /swagger-ui.html. Disable with SPRINGDOC_API_DOCS_ENABLED=false
+# and SPRINGDOC_SWAGGER_UI_ENABLED=false.
+springdoc:
+  paths-to-match: /api/v1/**
+  swagger-ui:
+    path: /swagger-ui.html
+    persist-authorization: true
+    operations-sorter: alpha
+    tags-sorter: alpha

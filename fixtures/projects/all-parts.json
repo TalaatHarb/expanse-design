@@ -955,34 +955,42 @@
   "nets" : [ {
     "id" : "f71239e6-e8ab-40ed-ae59-5ae912e528ff",
     "name" : "VIN",
-    "pinIds" : [ "b74aef68-a582-46a7-81f7-a27e8daa3946", "5648406c-b9fd-483e-90ec-eb5c6c885bfd" ]
+    "pinIds" : [ "b74aef68-a582-46a7-81f7-a27e8daa3946", "5648406c-b9fd-483e-90ec-eb5c6c885bfd" ],
+    "wires" : [ ]
   }, {
     "id" : "5bc701e4-f6fa-40bd-9fae-69c1e390fcbd",
     "name" : "SW",
-    "pinIds" : [ "9127b378-4c65-4e2b-860b-9441afec5af3", "0fabb286-8930-4351-8d43-6a9b3274e847" ]
+    "pinIds" : [ "9127b378-4c65-4e2b-860b-9441afec5af3", "0fabb286-8930-4351-8d43-6a9b3274e847" ],
+    "wires" : [ ]
   }, {
     "id" : "a5f48bee-3960-4e00-a447-fb17fb884f08",
     "name" : "BASE",
-    "pinIds" : [ "e9c8aa1f-8b61-47ac-a197-7f1ee4777d3a", "34fe4b9e-4fca-4206-b2e8-b44099876e92" ]
+    "pinIds" : [ "e9c8aa1f-8b61-47ac-a197-7f1ee4777d3a", "34fe4b9e-4fca-4206-b2e8-b44099876e92" ],
+    "wires" : [ ]
   }, {
     "id" : "380f6c85-9b3f-4ff0-b3b2-1b3d1db55bbb",
     "name" : "VCC",
-    "pinIds" : [ "ad29ed56-05b4-4675-b04b-3ef1779769aa", "378a64fd-afc9-453a-8e1b-1dfa2e491166", "5f0b5659-0230-4569-b5b4-878a64a65d5c", "6f19925e-2a86-4023-a345-dcfc01f9894a" ]
+    "pinIds" : [ "ad29ed56-05b4-4675-b04b-3ef1779769aa", "378a64fd-afc9-453a-8e1b-1dfa2e491166", "5f0b5659-0230-4569-b5b4-878a64a65d5c", "6f19925e-2a86-4023-a345-dcfc01f9894a" ],
+    "wires" : [ ]
   }, {
     "id" : "28a175a0-5505-4062-a194-fd3e10fde151",
     "name" : "OUT",
-    "pinIds" : [ "82431ca5-3279-4c31-b147-dc071875f5ac", "90ba39e6-25de-4ae3-87c2-b6a23e07f403", "fc03592c-a541-4626-b673-a26fefc36356", "fe99d69a-29c5-4ecb-8955-cd7d0b50b6f0", "370bd9eb-9cfd-4a4d-b1c9-ceb94843f627", "73f3761f-14c0-4d8b-bef0-a99e25c31580" ]
+    "pinIds" : [ "82431ca5-3279-4c31-b147-dc071875f5ac", "90ba39e6-25de-4ae3-87c2-b6a23e07f403", "fc03592c-a541-4626-b673-a26fefc36356", "fe99d69a-29c5-4ecb-8955-cd7d0b50b6f0", "370bd9eb-9cfd-4a4d-b1c9-ceb94843f627", "73f3761f-14c0-4d8b-bef0-a99e25c31580" ],
+    "wires" : [ ]
   }, {
     "id" : "4e186f22-84f3-4138-86b7-fc769319651a",
     "name" : "LOAD",
-    "pinIds" : [ "bca5a9e5-ad11-467b-9328-0abb483fc9bc", "c9e595e8-3f8b-4cb3-97c8-e79fa1f466c5", "e5b374a6-d1fb-412e-82ce-f8a9696ff394", "413c8abe-7880-480e-8264-f4e455a248a6" ]
+    "pinIds" : [ "bca5a9e5-ad11-467b-9328-0abb483fc9bc", "c9e595e8-3f8b-4cb3-97c8-e79fa1f466c5", "e5b374a6-d1fb-412e-82ce-f8a9696ff394", "413c8abe-7880-480e-8264-f4e455a248a6" ],
+    "wires" : [ ]
   }, {
     "id" : "467e66de-3485-429d-bca4-2ed9e425f0ae",
     "name" : "GND",
-    "pinIds" : [ "a5b33539-9c32-4af7-905c-7ac120ca20eb", "ac764529-c554-4758-8f89-2cb0bbcfa19c", "b0ec2cd3-bf56-42e2-955b-0724ad68175b", "b737d284-fbde-41de-9afe-e6fd05abe7d6", "c9084cca-d2bf-46c0-a238-a87c31c4c8c9", "4c879fc1-3f6f-458a-a8e7-976c20775566" ]
+    "pinIds" : [ "a5b33539-9c32-4af7-905c-7ac120ca20eb", "ac764529-c554-4758-8f89-2cb0bbcfa19c", "b0ec2cd3-bf56-42e2-955b-0724ad68175b", "b737d284-fbde-41de-9afe-e6fd05abe7d6", "c9084cca-d2bf-46c0-a238-a87c31c4c8c9", "4c879fc1-3f6f-458a-a8e7-976c20775566" ],
+    "wires" : [ ]
   } ],
+  "parts" : [ ],
   "revision" : 1,
-  "schemaVersion" : "0.2",
+  "schemaVersion" : "0.3",
   "sheets" : [ {
     "id" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02",
     "name" : "Main"

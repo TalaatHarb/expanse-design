@@ -92,6 +92,33 @@ final class ProjectSession {
         return api.previewChanges(snapshot.id(), new ChangeSet(snapshot.revision(), operations));
     }
 
+    /** Undo/redo availability of the open project, or null when nothing is open. */
+    HistoryView history() {
+        return snapshot == null ? null : api.history(snapshot.id());
+    }
+
+    ChangeResult undo() {
+        return step(true);
+    }
+
+    ChangeResult redo() {
+        return step(false);
+    }
+
+    private ChangeResult step(boolean undo) {
+        try {
+            var request = new HistoryStep(snapshot.revision());
+            ChangeResult result = undo ? api.undo(snapshot.id(), request) : api.redo(snapshot.id(), request);
+            snapshot = result.snapshot();
+            return result;
+        } catch (ConnectorException e) {
+            if ("REVISION_CONFLICT".equals(e.error().code())) {
+                snapshot = api.project(snapshot.id());
+            }
+            throw e;
+        }
+    }
+
     void save() throws IOException {
         if (file == null) {
             throw new IllegalStateException("Choose a file with Save As first");
