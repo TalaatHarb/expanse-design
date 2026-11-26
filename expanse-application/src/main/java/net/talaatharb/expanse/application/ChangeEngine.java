@@ -166,6 +166,22 @@ public final class ChangeEngine {
                 changes.add("Deleted wire " + op.wireId());
                 yield editor.deleteWire(p, op.wireId());
             }
+            case PlaceNetLabelOp op -> {
+                boolean onPin = !blank(op.pin());
+                Design.require(onPin != !blank(op.net()), "place_net_label needs either pin or net");
+                Design.require(onPin || (op.xMm() != null && op.yMm() != null),
+                        "A label on a net needs xMm and yMm");
+                UUID id = UUID.randomUUID();
+                Project next = editor.placeLabel(p, id, op.name(), onPin ? pin(p, op.pin()) : null,
+                        onPin ? null : net(p, op.net()).id(), onPin ? null : new Point(op.xMm(), op.yMm()));
+                created.add(new CreatedObject("net_label", op.name(), id));
+                changes.add("Labelled " + (onPin ? op.pin() : "net " + op.net()) + " as " + op.name());
+                yield next;
+            }
+            case DeleteNetLabelOp op -> {
+                changes.add("Deleted net label " + op.labelId());
+                yield editor.deleteLabel(p, op.labelId());
+            }
             case DefinePartOp op -> {
                 Design.Definition part = PartSpecs.toDefinition(op.part(), library);
                 var parts = new ArrayList<>(p.parts().stream().filter(d -> !d.id().equals(part.id())).toList());

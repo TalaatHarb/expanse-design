@@ -8,6 +8,7 @@ import net.talaatharb.expanse.domain.Design.Body;
 import net.talaatharb.expanse.domain.Design.Component;
 import net.talaatharb.expanse.domain.Design.Definition;
 import net.talaatharb.expanse.domain.Design.Net;
+import net.talaatharb.expanse.domain.Design.NetLabel;
 import net.talaatharb.expanse.domain.Design.Pad;
 import net.talaatharb.expanse.domain.Design.ParameterDefinition;
 import net.talaatharb.expanse.domain.Design.PinDefinition;
@@ -39,6 +40,9 @@ public interface DesignViewMapper {
     WireView wire(Wire wire);
 
     NetView net(Net net);
+
+    @Mapping(target = "point", source = "at")
+    NetLabelView label(NetLabel label);
 
     TraceView trace(Trace trace);
 

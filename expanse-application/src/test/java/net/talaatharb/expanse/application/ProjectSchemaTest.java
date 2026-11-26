@@ -19,12 +19,15 @@ class ProjectSchemaTest {
     private final ProjectJson codec = new ProjectJson();
 
     @Test
-    void currentFixtureIsCanonicalAndConformsToSchema03() throws Exception {
-        Schema schema = schema("0.3");
+    void currentFixtureIsCanonicalAndConformsToSchema04() throws Exception {
+        Schema schema = schema("0.4");
         String fixture = resource("/fixtures/projects/all-parts.json");
         assertThat(schema.validate(mapper.readTree(fixture))).isEmpty();
         var project = codec.read(fixture);
-        assertThat(project.components()).hasSize(12);
+        assertThat(project.components()).hasSize(15);
+        assertThat(project.nets()).filteredOn(n -> n.name().equals("BUF")).singleElement()
+                .satisfies(n -> assertThat(n.labels()).singleElement().satisfies(l -> assertThat(l.pinId())
+                        .isEqualTo(project.component("U1").pin("OUT").id())));
         assertThat(project.board().traces()).hasSize(2);
         assertThat(new net.talaatharb.expanse.pcb.BoardAnalyzer().analyze(project).findings())
                 .as("the demo fixture must be free of design-rule errors")
@@ -38,7 +41,7 @@ class ProjectSchemaTest {
     @Test
     void logicDemoFixtureIsCanonicalCleanAndSimulates() throws Exception {
         String fixture = resource("/fixtures/projects/logic-demo.json");
-        assertThat(schema("0.3").validate(mapper.readTree(fixture))).isEmpty();
+        assertThat(schema("0.4").validate(mapper.readTree(fixture))).isEmpty();
         var project = codec.read(fixture);
         assertThat(codec.write(project)).isEqualToNormalizingNewlines(fixture.strip());
         assertThat(new net.talaatharb.expanse.validation.DesignValidator().validate(project))
@@ -59,7 +62,7 @@ class ProjectSchemaTest {
         String legacy = resource("/fixtures/projects/legacy/resistor-loop-0.1.json");
         assertThat(schema("0.1").validate(mapper.readTree(legacy))).isEmpty();
         var project = codec.read(legacy);
-        assertThat(project.schemaVersion()).isEqualTo("0.3");
+        assertThat(project.schemaVersion()).isEqualTo("0.4");
         assertThat(project.id()).isEqualTo(UUID.fromString("00000000-0000-0000-0000-000000000001"));
         assertThat(project.revision()).isEqualTo(2);
         var resistor = project.component("R1");
@@ -68,7 +71,7 @@ class ProjectSchemaTest {
         assertThat(resistor.pins()).extracting(p -> p.id().toString())
                 .containsExactly("00000000-0000-0000-0000-000000000004", "00000000-0000-0000-0000-000000000005");
         assertThat(project.board().placements()).isEmpty();
-        assertThat(schema("0.3").validate(mapper.readTree(codec.write(project)))).isEmpty();
+        assertThat(schema("0.4").validate(mapper.readTree(codec.write(project)))).isEmpty();
 
         String unknownPart = legacy.replace("builtin.resistor", "vendor.mystery");
         assertThatThrownBy(() -> codec.read(unknownPart)).isInstanceOfSatisfying(DesignException.class,
@@ -82,11 +85,30 @@ class ProjectSchemaTest {
         String previous = resource("/fixtures/projects/legacy/logic-demo-0.2.json");
         assertThat(schema("0.2").validate(mapper.readTree(previous))).isEmpty();
         var project = codec.read(previous);
-        assertThat(project.schemaVersion()).isEqualTo("0.3");
+        assertThat(project.schemaVersion()).isEqualTo("0.4");
         assertThat(project.parts()).isEmpty();
-        assertThat(project.nets()).isNotEmpty().allMatch(n -> n.wires().isEmpty());
+        assertThat(project.nets()).isNotEmpty().allMatch(n -> n.wires().isEmpty() && n.labels().isEmpty());
         assertThat(codec.write(project)).as("migration only adds the new collections")
                 .isEqualToNormalizingNewlines(resource("/fixtures/projects/logic-demo.json").strip());
+    }
+
+    @Test
+    void schema03DocumentsMigrateWithEmptyLabelsAndKeepEverythingElse() throws Exception {
+        String wires = resource("/fixtures/projects/legacy/all-parts-0.3.json");
+        assertThat(schema("0.3").validate(mapper.readTree(wires))).isEmpty();
+        var project = codec.read(wires);
+        assertThat(project.schemaVersion()).isEqualTo("0.4");
+        assertThat(project.components()).hasSize(12);
+        assertThat(project.board().traces()).hasSize(2);
+        assertThat(project.nets()).isNotEmpty().allMatch(n -> n.labels().isEmpty());
+        var rewritten = mapper.readTree(codec.write(project));
+        assertThat(schema("0.4").validate(rewritten)).isEmpty();
+        var original = (ObjectNode) mapper.readTree(wires);
+        original.put("schemaVersion", "0.4");
+        original.withArray("nets").forEach(n -> ((ObjectNode) n).putArray("labels"));
+        assertThat(rewritten).as("migration only adds empty label lists").isEqualTo(original);
+        assertThatThrownBy(() -> codec.read(wires.replace("\"wires\" : [ ]", "\"wires\" : [ ], \"labels\" : [ ]")))
+                .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("INVALID_DOCUMENT"));
     }
 
     private String resource(String path) throws IOException {

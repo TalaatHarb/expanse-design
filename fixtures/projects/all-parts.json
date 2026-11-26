@@ -52,6 +52,21 @@
       "rotation" : 0,
       "xMm" : 48.25999999999999,
       "yMm" : 10.16
+    }, {
+      "componentId" : "1ab2bae3-833d-4cf2-b6e7-85ff3e7f4eb3",
+      "rotation" : 0,
+      "xMm" : 15.24,
+      "yMm" : 22.86
+    }, {
+      "componentId" : "70556c25-af8c-4b29-bdb8-aa19326e11a6",
+      "rotation" : 0,
+      "xMm" : 27.94,
+      "yMm" : 22.86
+    }, {
+      "componentId" : "b6936c40-0eda-479c-a87b-f1a3558e1b1e",
+      "rotation" : 0,
+      "xMm" : 45.72,
+      "yMm" : 25.4
     } ],
     "thicknessMm" : 1.6,
     "traces" : [ {
@@ -946,51 +961,380 @@
     "reference" : "M2",
     "rotation" : 0,
     "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#c0392b",
+        "depthMm" : 1.9,
+        "heightMm" : 1.9,
+        "shape" : "axial",
+        "widthMm" : 4.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 3.5,
+        "courtyardWidthMm" : 10.02,
+        "name" : "D_DO-35_P7.62mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.diode",
+      "kind" : "diode",
+      "name" : "Diode (small signal, DO-35)",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "2.5n",
+        "name" : "saturationCurrent",
+        "unit" : "A"
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "1.75",
+        "name" : "emissionCoefficient",
+        "unit" : ""
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "K",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "1ab2bae3-833d-4cf2-b6e7-85ff3e7f4eb3",
+    "pins" : [ {
+      "id" : "f1e71ba0-b73a-4b35-a71a-f1313c882adf",
+      "number" : "1"
+    }, {
+      "id" : "0b88a2f5-149c-4302-b15f-089f4d748759",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 130.0,
+      "y" : 40.0
+    },
+    "properties" : {
+      "emissionCoefficient" : "1.75",
+      "saturationCurrent" : "2.5n"
+    },
+    "reference" : "D1",
+    "rotation" : 90,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#e53935",
+        "depthMm" : 5.0,
+        "heightMm" : 8.6,
+        "shape" : "cylinder",
+        "widthMm" : 5.0
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 6.0,
+        "courtyardWidthMm" : 6.0,
+        "name" : "LED_D5.0mm",
+        "pads" : [ {
+          "drillMm" : 0.9,
+          "heightMm" : 1.8,
+          "number" : "1",
+          "widthMm" : 1.8,
+          "xMm" : -1.27,
+          "yMm" : 0.0
+        }, {
+          "drillMm" : 0.9,
+          "heightMm" : 1.8,
+          "number" : "2",
+          "widthMm" : 1.8,
+          "xMm" : 1.27,
+          "yMm" : 0.0
+        } ]
+      },
+      "id" : "builtin.led",
+      "kind" : "led",
+      "name" : "LED (5 mm)",
+      "parameters" : [ {
+        "allowedValues" : [ "red", "yellow", "green", "blue", "white" ],
+        "defaultValue" : "red",
+        "name" : "color",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "2",
+        "name" : "forwardVoltage",
+        "unit" : "V"
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "2",
+        "name" : "emissionCoefficient",
+        "unit" : ""
+      } ],
+      "pins" : [ {
+        "name" : "A",
+        "number" : "1",
+        "required" : true
+      }, {
+        "name" : "K",
+        "number" : "2",
+        "required" : true
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "70556c25-af8c-4b29-bdb8-aa19326e11a6",
+    "pins" : [ {
+      "id" : "c726678c-fabb-41a4-b94a-2418c558d088",
+      "number" : "1"
+    }, {
+      "id" : "3f4fcb16-137b-4f4f-8f19-4d46824c8e29",
+      "number" : "2"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 150.0,
+      "y" : 40.0
+    },
+    "properties" : {
+      "color" : "green",
+      "emissionCoefficient" : "2",
+      "forwardVoltage" : "2"
+    },
+    "reference" : "D2",
+    "rotation" : 90,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
+  }, {
+    "definition" : {
+      "body" : {
+        "color" : "#1c1c1c",
+        "depthMm" : 11.38,
+        "heightMm" : 3.3,
+        "shape" : "box",
+        "widthMm" : 6.35
+      },
+      "footprint" : {
+        "courtyardHeightMm" : 11.98,
+        "courtyardWidthMm" : 10.2,
+        "name" : "DIP-8_W7.62mm",
+        "pads" : [ {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "1",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 3.81
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "2",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : 1.27
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "3",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -1.27
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "4",
+          "widthMm" : 1.6,
+          "xMm" : -3.81,
+          "yMm" : -3.81
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "5",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -3.81
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "6",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : -1.27
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "7",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 1.27
+        }, {
+          "drillMm" : 0.8,
+          "heightMm" : 1.6,
+          "number" : "8",
+          "widthMm" : 1.6,
+          "xMm" : 3.81,
+          "yMm" : 3.81
+        } ]
+      },
+      "id" : "builtin.opamp",
+      "kind" : "opamp",
+      "name" : "Op-amp (single, DIP-8)",
+      "parameters" : [ {
+        "allowedValues" : [ ],
+        "defaultValue" : "100k",
+        "name" : "openLoopGain",
+        "unit" : ""
+      }, {
+        "allowedValues" : [ ],
+        "defaultValue" : "75",
+        "name" : "outputResistance",
+        "unit" : "ohm"
+      } ],
+      "pins" : [ {
+        "name" : "NULL1",
+        "number" : "1",
+        "required" : false
+      }, {
+        "name" : "IN-",
+        "number" : "2",
+        "required" : true
+      }, {
+        "name" : "IN+",
+        "number" : "3",
+        "required" : true
+      }, {
+        "name" : "V-",
+        "number" : "4",
+        "required" : true
+      }, {
+        "name" : "NULL2",
+        "number" : "5",
+        "required" : false
+      }, {
+        "name" : "OUT",
+        "number" : "6",
+        "required" : true
+      }, {
+        "name" : "V+",
+        "number" : "7",
+        "required" : true
+      }, {
+        "name" : "NC",
+        "number" : "8",
+        "required" : false
+      } ],
+      "version" : "1.0"
+    },
+    "id" : "b6936c40-0eda-479c-a87b-f1a3558e1b1e",
+    "pins" : [ {
+      "id" : "9a7018f5-ff44-4878-a404-f86d366319e3",
+      "number" : "1"
+    }, {
+      "id" : "1dadac5f-cd2c-49f8-93cb-191c8a40313c",
+      "number" : "2"
+    }, {
+      "id" : "e1eb24af-3b79-4dc3-ab8e-7d0eabb0cf04",
+      "number" : "3"
+    }, {
+      "id" : "a95a9677-361c-40e5-acf1-6d4da594e527",
+      "number" : "4"
+    }, {
+      "id" : "13102630-8579-4f34-84e9-7bdc16936b7f",
+      "number" : "5"
+    }, {
+      "id" : "fd466aa4-d354-4204-8633-9c9b9162675c",
+      "number" : "6"
+    }, {
+      "id" : "343a31ad-81ed-42c7-960d-747664dffe94",
+      "number" : "7"
+    }, {
+      "id" : "e4b265f2-1840-4b94-bf2e-3966acb2c39a",
+      "number" : "8"
+    } ],
+    "position" : {
+      "unit" : "mm",
+      "x" : 170.0,
+      "y" : 20.0
+    },
+    "properties" : {
+      "openLoopGain" : "100k",
+      "outputResistance" : "75"
+    },
+    "reference" : "U1",
+    "rotation" : 0,
+    "sheetId" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02"
   } ],
   "createdAt" : "2026-11-26T11:22:05.544671900Z",
   "extensions" : { },
   "id" : "84ef4b70-f319-4a4d-9d38-5bd0a9679a61",
-  "modifiedAt" : "2026-11-26T11:22:05.628800900Z",
+  "modifiedAt" : "2026-11-26T18:35:43.329289500Z",
   "name" : "All parts - switched transistor stage",
   "nets" : [ {
     "id" : "f71239e6-e8ab-40ed-ae59-5ae912e528ff",
+    "labels" : [ ],
     "name" : "VIN",
     "pinIds" : [ "b74aef68-a582-46a7-81f7-a27e8daa3946", "5648406c-b9fd-483e-90ec-eb5c6c885bfd" ],
     "wires" : [ ]
   }, {
     "id" : "5bc701e4-f6fa-40bd-9fae-69c1e390fcbd",
+    "labels" : [ ],
     "name" : "SW",
     "pinIds" : [ "9127b378-4c65-4e2b-860b-9441afec5af3", "0fabb286-8930-4351-8d43-6a9b3274e847" ],
     "wires" : [ ]
   }, {
     "id" : "a5f48bee-3960-4e00-a447-fb17fb884f08",
+    "labels" : [ ],
     "name" : "BASE",
     "pinIds" : [ "e9c8aa1f-8b61-47ac-a197-7f1ee4777d3a", "34fe4b9e-4fca-4206-b2e8-b44099876e92" ],
     "wires" : [ ]
   }, {
-    "id" : "380f6c85-9b3f-4ff0-b3b2-1b3d1db55bbb",
-    "name" : "VCC",
-    "pinIds" : [ "ad29ed56-05b4-4675-b04b-3ef1779769aa", "378a64fd-afc9-453a-8e1b-1dfa2e491166", "5f0b5659-0230-4569-b5b4-878a64a65d5c", "6f19925e-2a86-4023-a345-dcfc01f9894a" ],
-    "wires" : [ ]
-  }, {
-    "id" : "28a175a0-5505-4062-a194-fd3e10fde151",
-    "name" : "OUT",
-    "pinIds" : [ "82431ca5-3279-4c31-b147-dc071875f5ac", "90ba39e6-25de-4ae3-87c2-b6a23e07f403", "fc03592c-a541-4626-b673-a26fefc36356", "fe99d69a-29c5-4ecb-8955-cd7d0b50b6f0", "370bd9eb-9cfd-4a4d-b1c9-ceb94843f627", "73f3761f-14c0-4d8b-bef0-a99e25c31580" ],
-    "wires" : [ ]
-  }, {
     "id" : "4e186f22-84f3-4138-86b7-fc769319651a",
+    "labels" : [ ],
     "name" : "LOAD",
-    "pinIds" : [ "bca5a9e5-ad11-467b-9328-0abb483fc9bc", "c9e595e8-3f8b-4cb3-97c8-e79fa1f466c5", "e5b374a6-d1fb-412e-82ce-f8a9696ff394", "413c8abe-7880-480e-8264-f4e455a248a6" ],
+    "pinIds" : [ "bca5a9e5-ad11-467b-9328-0abb483fc9bc", "c726678c-fabb-41a4-b94a-2418c558d088", "c9e595e8-3f8b-4cb3-97c8-e79fa1f466c5", "e5b374a6-d1fb-412e-82ce-f8a9696ff394", "f1e71ba0-b73a-4b35-a71a-f1313c882adf", "413c8abe-7880-480e-8264-f4e455a248a6" ],
     "wires" : [ ]
   }, {
     "id" : "467e66de-3485-429d-bca4-2ed9e425f0ae",
+    "labels" : [ ],
     "name" : "GND",
-    "pinIds" : [ "a5b33539-9c32-4af7-905c-7ac120ca20eb", "ac764529-c554-4758-8f89-2cb0bbcfa19c", "b0ec2cd3-bf56-42e2-955b-0724ad68175b", "b737d284-fbde-41de-9afe-e6fd05abe7d6", "c9084cca-d2bf-46c0-a238-a87c31c4c8c9", "4c879fc1-3f6f-458a-a8e7-976c20775566" ],
+    "pinIds" : [ "a5b33539-9c32-4af7-905c-7ac120ca20eb", "a95a9677-361c-40e5-acf1-6d4da594e527", "ac764529-c554-4758-8f89-2cb0bbcfa19c", "b0ec2cd3-bf56-42e2-955b-0724ad68175b", "b737d284-fbde-41de-9afe-e6fd05abe7d6", "c9084cca-d2bf-46c0-a238-a87c31c4c8c9", "0b88a2f5-149c-4302-b15f-089f4d748759", "3f4fcb16-137b-4f4f-8f19-4d46824c8e29", "4c879fc1-3f6f-458a-a8e7-976c20775566" ],
+    "wires" : [ ]
+  }, {
+    "id" : "380f6c85-9b3f-4ff0-b3b2-1b3d1db55bbb",
+    "labels" : [ ],
+    "name" : "VCC",
+    "pinIds" : [ "ad29ed56-05b4-4675-b04b-3ef1779769aa", "343a31ad-81ed-42c7-960d-747664dffe94", "378a64fd-afc9-453a-8e1b-1dfa2e491166", "5f0b5659-0230-4569-b5b4-878a64a65d5c", "6f19925e-2a86-4023-a345-dcfc01f9894a" ],
+    "wires" : [ ]
+  }, {
+    "id" : "28a175a0-5505-4062-a194-fd3e10fde151",
+    "labels" : [ ],
+    "name" : "OUT",
+    "pinIds" : [ "82431ca5-3279-4c31-b147-dc071875f5ac", "90ba39e6-25de-4ae3-87c2-b6a23e07f403", "e1eb24af-3b79-4dc3-ab8e-7d0eabb0cf04", "fc03592c-a541-4626-b673-a26fefc36356", "fe99d69a-29c5-4ecb-8955-cd7d0b50b6f0", "370bd9eb-9cfd-4a4d-b1c9-ceb94843f627", "73f3761f-14c0-4d8b-bef0-a99e25c31580" ],
+    "wires" : [ ]
+  }, {
+    "id" : "9ab9a1c9-05bc-445c-9dc5-c2c853116599",
+    "labels" : [ {
+      "at" : null,
+      "id" : "c0340081-6281-42a8-9eda-4d87afd0bc2b",
+      "pinId" : "fd466aa4-d354-4204-8633-9c9b9162675c"
+    } ],
+    "name" : "BUF",
+    "pinIds" : [ "fd466aa4-d354-4204-8633-9c9b9162675c", "1dadac5f-cd2c-49f8-93cb-191c8a40313c" ],
     "wires" : [ ]
   } ],
   "parts" : [ ],
-  "revision" : 1,
-  "schemaVersion" : "0.3",
+  "revision" : 2,
+  "schemaVersion" : "0.4",
   "sheets" : [ {
     "id" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02",
     "name" : "Main"

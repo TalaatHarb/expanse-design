@@ -42,13 +42,16 @@ public final class ProjectJson {
             .enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
             .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
             .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
-            .addModule(new SimpleModule().addDeserializer(Design.Wire.class, new WireDeserializer()))
+            .addModule(new SimpleModule().addDeserializer(Design.Wire.class, new WireDeserializer())
+                    .addDeserializer(Design.NetLabel.class, new NetLabelDeserializer()))
             .build();
 
     public static final String LEGACY_VERSION = "0.1";
     public static final String PREVIOUS_VERSION = "0.2";
+    public static final String WIRES_VERSION = "0.3";
     private final Schema legacySchema;
     private final Schema previousSchema;
+    private final Schema wiresSchema;
     private final ComponentLibrary library;
 
     public ProjectJson() {
@@ -60,6 +63,7 @@ public final class ProjectJson {
         schema = load(Design.SCHEMA_VERSION);
         legacySchema = load(LEGACY_VERSION);
         previousSchema = load(PREVIOUS_VERSION);
+        wiresSchema = load(WIRES_VERSION);
     }
 
     private static Schema load(String version) {
@@ -108,6 +112,12 @@ public final class ProjectJson {
                             "Project JSON does not conform to schema 0.2; check required fields, types, IDs and units");
                 }
                 tree = migrateFromPrevious((ObjectNode) tree);
+            } else if (version.isTextual() && WIRES_VERSION.equals(version.textValue())) {
+                if (!wiresSchema.validate(tree).isEmpty()) {
+                    throw new DesignException("INVALID_DOCUMENT",
+                            "Project JSON does not conform to schema 0.3; check required fields, types, IDs and units");
+                }
+                tree = migrateFromWires((ObjectNode) tree);
             } else if (version.isTextual() && !Design.SCHEMA_VERSION.equals(version.textValue())) {
                 throw new DesignException("UNSUPPORTED_SCHEMA", "Unsupported project schema: " + version.textValue());
             }
@@ -129,7 +139,7 @@ public final class ProjectJson {
     /**
      * 0.1 documents carried pin-only definition snapshots. Migration substitutes the current built-in definition
      * with the same ID (pins must match), adds default parameter values, rotation 0 and an empty board.
-     * Identity and revision are preserved so a migrated project keeps its history position. Continues to 0.3.
+     * Identity and revision are preserved so a migrated project keeps its history position. Continues to 0.4.
      */
     private JsonNode migrateFromLegacy(ObjectNode tree) {
         tree.put("schemaVersion", Design.SCHEMA_VERSION);
@@ -152,14 +162,45 @@ public final class ProjectJson {
         return migrateFromPrevious(tree);
     }
 
-    /** 0.2 → 0.3: nets gain (empty) wire graphics and the project gains an (empty) custom part list. */
+    /** 0.2 → 0.3: nets gain (empty) wire graphics and the project gains an (empty) custom part list. Continues. */
     private JsonNode migrateFromPrevious(ObjectNode tree) {
         tree.put("schemaVersion", Design.SCHEMA_VERSION);
         for (JsonNode net : tree.withArray("nets")) {
             ((ObjectNode) net).putArray("wires");
         }
         tree.putArray("parts");
+        return migrateFromWires(tree);
+    }
+
+    /** 0.3 → 0.4: nets gain (empty) net labels; 0.4 also adds the diode, LED and op-amp kinds. */
+    private JsonNode migrateFromWires(ObjectNode tree) {
+        tree.put("schemaVersion", Design.SCHEMA_VERSION);
+        for (JsonNode net : tree.withArray("nets")) {
+            ((ObjectNode) net).putArray("labels");
+        }
         return tree;
+    }
+
+    /** Exactly one of pinId and at is set; the other is null or absent. */
+    private static final class NetLabelDeserializer extends StdDeserializer<Design.NetLabel> {
+        NetLabelDeserializer() {
+            super(Design.NetLabel.class);
+        }
+
+        @Override
+        public Design.NetLabel deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            JsonNode node = context.readTree(parser);
+            for (var field : node.properties()) {
+                if (!java.util.Set.of("id", "pinId", "at").contains(field.getKey())) {
+                    throw new DesignException("INVALID_DOCUMENT", "Unknown net label property " + field.getKey());
+                }
+            }
+            JsonNode at = node.get("at");
+            Design.Point point = at == null || at.isNull() ? null
+                    : new Design.Point(at.path("xMm").asDouble(), at.path("yMm").asDouble());
+            return new Design.NetLabel(WireDeserializer.uuid(node.get("id")), WireDeserializer.uuid(node.get("pinId")),
+                    point);
+        }
     }
 
     /** Wire ends may be null (free ends), which the strict creator settings would otherwise reject. */

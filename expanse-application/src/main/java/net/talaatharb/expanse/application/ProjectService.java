@@ -271,7 +271,7 @@ public final class ProjectService {
     public List<Capability> capabilities() {
         return List.of(
                 new Capability("project.lifecycle", true,
-                        "Revisioned projects, canonical JSON 0.3 import/export with 0.1/0.2 migration"),
+                        "Revisioned projects, canonical JSON 0.4 import/export with 0.1-0.3 migration"),
                 new Capability("schematic.basic", true,
                         "R, L, C, sources, rails, ground, switches, BJTs and MOSFETs with typed parameters"),
                 new Capability("schematic.wires", true, "Wire graphics with bends, free ends and junctions"),

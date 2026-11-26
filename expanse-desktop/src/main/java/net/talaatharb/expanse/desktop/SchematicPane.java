@@ -1,10 +1,14 @@
 package net.talaatharb.expanse.desktop;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
@@ -24,11 +28,19 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 import net.talaatharb.expanse.dto.ApiModels.*;
 
 /** Schematic editor: palette, canvas with place/move/rotate/wire tools, property sheet and diagnostics. */
 final class SchematicPane {
-    private enum Tool { SELECT, PLACE, WIRE }
+    private enum Tool { SELECT, PLACE, WIRE, LABEL }
+
+    /** A drawn net label in screen coordinates, kept from the last redraw for hit testing. */
+    private record LabelBox(NetLabelView label, NetView net, double x, double y, double width, double height) {
+        boolean contains(double px, double py) {
+            return px >= x && px <= x + width && py >= y && py <= y + height;
+        }
+    }
 
     private record PinHit(ComponentView component, PinView pin, double x, double y) {
         String label() {
@@ -63,7 +75,18 @@ final class SchematicPane {
     private final ToggleButton selectTool = new ToggleButton("Select");
     private final ToggleButton placeTool = new ToggleButton("Place");
     private final ToggleButton wireTool = new ToggleButton("Wire");
+    private final ToggleButton labelTool = new ToggleButton("Label");
     private final Label hint = new Label();
+    /** Selected components in selection order; the first is the workbench (primary) selection. */
+    private final LinkedHashSet<UUID> selection = new LinkedHashSet<>();
+    private final List<LabelBox> labelBoxes = new ArrayList<>();
+    private UUID selectedLabel;
+    private boolean rubberBand;
+    private boolean spaceDown;
+    private boolean mouseInside;
+    private SchematicClipboard.Clip clip;
+    private int pasteCount;
+    private List<String> pendingSelection;
     private Snapshot project;
     private List<DefinitionView> library = List.of();
     private Map<UUID, NetView> netByPin = Map.of();
@@ -91,8 +114,12 @@ final class SchematicPane {
         selectTool.setToggleGroup(toolGroup);
         placeTool.setToggleGroup(toolGroup);
         wireTool.setToggleGroup(toolGroup);
+        labelTool.setToggleGroup(toolGroup);
         selectTool.setSelected(true);
-        selectTool.setTooltip(new Tooltip("Select, drag to move, drag empty space to pan (S)"));
+        selectTool.setTooltip(new Tooltip("Select (S): click or drag a box to select, Shift/Ctrl-click to add or "
+                + "remove, drag to move; pan with the middle button or Space+drag"));
+        labelTool.setTooltip(new Tooltip("Net labels (L): click a pin or wire and type a net name; pins with the same "
+                + "label are connected without a wire"));
         placeTool.setTooltip(new Tooltip("Click to place the part selected in the palette (P)"));
         wireTool.setTooltip(new Tooltip("Draw wires (W): click a pin or wire, click empty space to add bends, click a "
                 + "pin or wire to finish. Pins can also be wired in Select mode."));
@@ -101,7 +128,8 @@ final class SchematicPane {
                 old.setSelected(true);
                 return;
             }
-            tool = now == placeTool ? Tool.PLACE : now == wireTool ? Tool.WIRE : Tool.SELECT;
+            tool = now == placeTool ? Tool.PLACE : now == wireTool ? Tool.WIRE : now == labelTool ? Tool.LABEL
+                    : Tool.SELECT;
             cancelWire();
             updateHint();
             redraw();
@@ -117,7 +145,15 @@ final class SchematicPane {
         });
         Button validate = new Button("Check (ERC)");
         validate.setOnAction(e -> validate());
-        var toolbar = new HBox(6, selectTool, placeTool, wireTool, new Separator(Orientation.VERTICAL), rotate, delete,
+        selectTool.setId("schematic-select");
+        placeTool.setId("schematic-place");
+        wireTool.setId("schematic-wire");
+        labelTool.setId("schematic-label");
+        canvas.setId("schematic-canvas");
+        palette.setId("schematic-palette");
+        properties.setId("schematic-properties");
+        var toolbar = new HBox(6, selectTool, placeTool, wireTool, labelTool, new Separator(Orientation.VERTICAL),
+                rotate, delete,
                 fit, validate, new Separator(Orientation.VERTICAL), hint);
         toolbar.setPadding(new Insets(4));
 
@@ -132,6 +168,11 @@ final class SchematicPane {
         });
         palette.getSelectionModel().selectedItemProperty().addListener((o, old, now) -> {
             if (now != null) {
+                placeTool.setSelected(true);
+            }
+        });
+        palette.setOnMouseClicked(e -> {
+            if (palette.getSelectionModel().getSelectedItem() != null) {
                 placeTool.setSelected(true);
             }
         });
@@ -161,9 +202,20 @@ final class SchematicPane {
                 redraw();
             }
         });
+        canvas.setOnMouseEntered(e -> mouseInside = true);
+        canvas.setOnMouseExited(e -> mouseInside = false);
         canvas.setOnScroll(this::zoom);
+        canvas.setOnKeyReleased(e -> {
+            if (e.getCode() == KeyCode.SPACE) {
+                spaceDown = false;
+            }
+        });
         canvas.setOnKeyPressed(e -> {
+            if (e.isShortcutDown() || e.isAltDown()) {
+                return;
+            }
             switch (e.getCode()) {
+                case SPACE -> spaceDown = true;
                 case R -> rotateSelected();
                 case DELETE -> deleteSelected();
                 case BACK_SPACE -> {
@@ -179,14 +231,17 @@ final class SchematicPane {
                 case ESCAPE -> {
                     if (wireStart != null) {
                         cancelWire();
-                    } else {
+                    } else if (tool != Tool.SELECT) {
                         selectTool.setSelected(true);
+                    } else {
+                        clearSelection();
                     }
                     redraw();
                 }
                 case S -> selectTool.setSelected(true);
                 case P -> placeTool.setSelected(true);
                 case W -> wireTool.setSelected(true);
+                case L -> labelTool.setSelected(true);
                 case F -> {
                     fit();
                     redraw();
@@ -292,8 +347,18 @@ final class SchematicPane {
                 .flatMap(n -> n.wires().stream()).noneMatch(w -> w.id().equals(selectedWire)))) {
             selectedWire = null;
         }
+        if (selectedLabel != null && (snapshot == null || snapshot.nets().stream()
+                .flatMap(n -> n.labels().stream()).noneMatch(l -> l.id().equals(selectedLabel)))) {
+            selectedLabel = null;
+        }
+        var existing = new HashSet<UUID>();
+        if (snapshot != null) {
+            snapshot.components().forEach(c -> existing.add(c.id()));
+        }
+        selection.retainAll(existing);
         if (snapshot != null && !snapshot.id().equals(fittedProject)) {
             fittedProject = snapshot.id();
+            selection.clear();
             fit();
         }
         if (latestDiagnostics != null) {
@@ -303,14 +368,119 @@ final class SchematicPane {
         }
         showProperties();
         redraw();
+        if (pendingSelection != null && snapshot != null) {
+            var references = new HashSet<>(pendingSelection);
+            pendingSelection = null;
+            setSelection(snapshot.components().stream().filter(c -> references.contains(c.reference()))
+                    .map(ComponentView::id).toList());
+        }
     }
 
     void selectionChanged() {
-        if (workbench.selected() != null) {
+        UUID primary = workbench.selected();
+        if (primary == null) {
+            selection.clear();
+        } else {
             selectedWire = null;
+            selectedLabel = null;
+            if (!selection.contains(primary)) {
+                selection.clear();
+                selection.add(primary);
+            }
         }
         showProperties();
         redraw();
+    }
+
+    /** Replaces the component selection; the first ID becomes the workbench selection shared with the PCB view. */
+    private void setSelection(Collection<UUID> ids) {
+        selection.clear();
+        selection.addAll(ids);
+        if (!selection.isEmpty()) {
+            selectedWire = null;
+            selectedLabel = null;
+        }
+        UUID primary = selection.isEmpty() ? null : selection.iterator().next();
+        if (Objects.equals(primary, workbench.selected())) {
+            showProperties();
+            redraw();
+        } else {
+            workbench.select(primary);
+        }
+    }
+
+    private void clearSelection() {
+        selectedWire = null;
+        selectedLabel = null;
+        setSelection(List.of());
+    }
+
+    /** Selected components in selection order. */
+    List<ComponentView> selectedComponents() {
+        if (project == null) {
+            return List.of();
+        }
+        var byId = new HashMap<UUID, ComponentView>();
+        project.components().forEach(c -> byId.put(c.id(), c));
+        return selection.stream().map(byId::get).filter(Objects::nonNull).toList();
+    }
+
+    void selectAll() {
+        if (project != null) {
+            setSelection(project.components().stream().map(ComponentView::id).toList());
+            workbench.status(selection.size() + " component(s) selected");
+        }
+    }
+
+    // ---- Clipboard ----
+
+    /** Copies the selected components with their internal connections; false when nothing is selected. */
+    boolean copy() {
+        var copied = project == null ? null : SchematicClipboard.copy(project, selection);
+        if (copied == null) {
+            workbench.status("Select components to copy");
+            return false;
+        }
+        clip = copied;
+        pasteCount = 0;
+        workbench.status("Copied " + copied.components().size() + " component(s)");
+        return true;
+    }
+
+    void cut() {
+        if (copy()) {
+            deleteComponents(selectedComponents());
+        }
+    }
+
+    /** Pastes at the mouse when it is over the canvas, otherwise offset from the copied position. */
+    void paste() {
+        if (project == null || clip == null) {
+            workbench.status(project == null ? "Open a project first" : "Nothing to paste; copy components first");
+            return;
+        }
+        double dx;
+        double dy;
+        if (mouseInside) {
+            dx = snap(mmX(mouseX)) - clip.originX();
+            dy = snap(mmY(mouseY)) - clip.originY();
+        } else {
+            pasteCount++;
+            dx = dy = 4 * Symbols.GRID * pasteCount;
+        }
+        var paste = SchematicClipboard.paste(clip, project, dx, dy);
+        pendingSelection = paste.references();
+        workbench.apply(paste.operations());
+        workbench.status("Pasted " + String.join(", ", paste.references()));
+    }
+
+    void duplicate() {
+        if (copy()) {
+            boolean inside = mouseInside;
+            mouseInside = false;
+            paste();
+            mouseInside = inside;
+        }
     }
 
     void validate() {
@@ -340,6 +510,11 @@ final class SchematicPane {
 
     private double mmY(double sy) {
         return (sy - offsetY) / scale;
+    }
+
+    /** Screen position of a schematic point; used by the UI tests to click pins and parts. */
+    javafx.geometry.Point2D toScreen(double xMm, double yMm) {
+        return canvas.localToScreen(sx(xMm), sy(yMm));
     }
 
     private static double snap(double mm) {
@@ -386,6 +561,9 @@ final class SchematicPane {
         double bestDistance = radius;
         for (ComponentView c : project.components()) {
             for (PinView p : c.pins()) {
+                if (Symbols.hidden(c.kind(), p.number())) {
+                    continue;
+                }
                 double[] at = Symbols.pin(c, p);
                 double distance = Math.hypot(at[0] - mmX(x), at[1] - mmY(y));
                 if (distance <= bestDistance) {
@@ -467,14 +645,25 @@ final class SchematicPane {
         mouseY = e.getY();
         dragMoved = false;
         PinHit pin = pinAt(e.getX(), e.getY());
+        LabelBox label = pin == null ? labelAt(e.getX(), e.getY()) : null;
         ComponentView component = componentAt(e.getX(), e.getY());
         WireHit wire = pin == null ? wireAt(e.getX(), e.getY()) : null;
         if (e.getButton() == MouseButton.SECONDARY) {
-            contextMenu(e, pin, component, wire);
+            contextMenu(e, pin, label, component, wire);
             return;
         }
-        if (e.getButton() == MouseButton.MIDDLE) {
+        if (e.getButton() == MouseButton.MIDDLE || spaceDown) {
             panning = true;
+            return;
+        }
+        if (tool == Tool.LABEL) {
+            if (pin != null) {
+                labelPin(pin);
+            } else if (wire != null) {
+                labelWire(wire);
+            } else {
+                workbench.status("Click a pin or a wire to label its net");
+            }
             return;
         }
         if (tool == Tool.PLACE) {
@@ -500,22 +689,80 @@ final class SchematicPane {
             workbench.status("Start a wire on a pin or on an existing wire");
             return;
         }
+        if (label != null) {
+            setSelection(List.of());
+            selectedWire = null;
+            selectedLabel = label.label().id();
+            showProperties();
+            redraw();
+            return;
+        }
+        boolean toggle = e.isShiftDown() || e.isShortcutDown();
         if (component != null) {
             selectedWire = null;
-            workbench.select(component.id());
+            selectedLabel = null;
+            if (toggle) {
+                var next = new ArrayList<>(selection);
+                if (!next.remove(component.id())) {
+                    next.add(component.id());
+                }
+                setSelection(next);
+                return;
+            }
+            if (!selection.contains(component.id())) {
+                setSelection(List.of(component.id()));
+            }
             dragging = component;
             dragDx = mmX(e.getX()) - component.xMm();
             dragDy = mmY(e.getY()) - component.yMm();
         } else if (wire != null) {
-            workbench.select(null);
+            setSelection(List.of());
+            selectedLabel = null;
             selectedWire = wire.wire().id();
             showProperties();
             redraw();
         } else {
             selectedWire = null;
-            workbench.select(null);
-            panning = true;
+            selectedLabel = null;
+            if (!toggle) {
+                setSelection(List.of());
+            }
+            rubberBand = true;
         }
+    }
+
+    private void labelPin(PinHit pin) {
+        NetView net = netByPin.get(pin.pin().id());
+        askNetName("Label " + pin.label(), net == null ? "" : net.name()).ifPresent(name -> {
+            workbench.apply(List.of(new PlaceNetLabelOp(name, pin.pin().id().toString(), null, null, null)));
+            workbench.status("Labelled " + pin.label() + " as " + name);
+        });
+    }
+
+    private void labelWire(WireHit wire) {
+        askNetName("Label net " + wire.net().name(), wire.net().name()).ifPresent(name -> {
+            workbench.apply(List.of(new PlaceNetLabelOp(name, null, wire.net().id().toString(), wire.x(), wire.y())));
+            workbench.status("Labelled net " + wire.net().name() + " as " + name);
+        });
+    }
+
+    private java.util.Optional<String> askNetName(String header, String initial) {
+        var dialog = new TextInputDialog(initial);
+        dialog.setTitle("Net label");
+        dialog.setHeaderText(header + "\nPins with the same label share one net.");
+        dialog.setContentText("Net name:");
+        dialog.getEditor().setId("net-label-name");
+        dialog.initOwner(canvas.getScene().getWindow());
+        return dialog.showAndWait().map(String::strip).filter(name -> !name.isEmpty());
+    }
+
+    private LabelBox labelAt(double x, double y) {
+        for (int i = labelBoxes.size() - 1; i >= 0; i--) {
+            if (labelBoxes.get(i).contains(x, y)) {
+                return labelBoxes.get(i);
+            }
+        }
+        return null;
     }
 
     private void wireClick(MouseEvent e, PinHit pin, WireHit wire) {
@@ -590,16 +837,40 @@ final class SchematicPane {
 
     private void released(MouseEvent e) {
         if (dragging != null && dragMoved) {
-            double x = snap(mmX(e.getX()) - dragDx);
-            double y = snap(mmY(e.getY()) - dragDy);
-            ComponentView moved = dragging;
-            if (x != moved.xMm() || y != moved.yMm()) {
-                workbench.apply(List.of(new MoveOp(moved.id().toString(), x, y, null)));
+            double ddx = snap(mmX(e.getX()) - dragDx) - dragging.xMm();
+            double ddy = snap(mmY(e.getY()) - dragDy) - dragging.yMm();
+            if (ddx != 0 || ddy != 0) {
+                var moves = new ArrayList<Operation>();
+                for (ComponentView c : movingComponents()) {
+                    moves.add(new MoveOp(c.id().toString(), c.xMm() + ddx, c.yMm() + ddy, null));
+                }
+                workbench.apply(moves);
             }
+        }
+        if (rubberBand && dragMoved && project != null) {
+            double x0 = mmX(Math.min(pressX, e.getX()));
+            double x1 = mmX(Math.max(pressX, e.getX()));
+            double y0 = mmY(Math.min(pressY, e.getY()));
+            double y1 = mmY(Math.max(pressY, e.getY()));
+            var next = new ArrayList<>(selection);
+            project.components().stream()
+                    .filter(c -> c.xMm() >= x0 && c.xMm() <= x1 && c.yMm() >= y0 && c.yMm() <= y1)
+                    .map(ComponentView::id).filter(id -> !next.contains(id)).forEach(next::add);
+            setSelection(next);
+            workbench.status(selection.size() + " component(s) selected");
         }
         dragging = null;
         panning = false;
+        rubberBand = false;
         redraw();
+    }
+
+    /** The components a drag moves: the whole selection when the dragged part is in it. */
+    private List<ComponentView> movingComponents() {
+        if (dragging == null) {
+            return List.of();
+        }
+        return selection.contains(dragging.id()) ? selectedComponents() : List.of(dragging);
     }
 
     private void zoom(ScrollEvent e) {
@@ -613,7 +884,7 @@ final class SchematicPane {
         redraw();
     }
 
-    private void contextMenu(MouseEvent e, PinHit pin, ComponentView component, WireHit wire) {
+    private void contextMenu(MouseEvent e, PinHit pin, LabelBox label, ComponentView component, WireHit wire) {
         menu = new ContextMenu();
         if (pin != null) {
             NetView net = netByPin.get(pin.pin().id());
@@ -623,7 +894,9 @@ final class SchematicPane {
                 bends.clear();
                 redraw();
             });
-            menu.getItems().add(start);
+            var addLabel = new MenuItem("Add net label...");
+            addLabel.setOnAction(a -> labelPin(pin));
+            menu.getItems().addAll(start, addLabel);
             if (net != null) {
                 var disconnect = new MenuItem("Disconnect " + pin.label() + " from " + net.name());
                 disconnect.setOnAction(a -> workbench.apply(List.of(new DisconnectOp(pin.pin().id().toString()))));
@@ -631,34 +904,64 @@ final class SchematicPane {
                 rename.setOnAction(a -> renameNet(net));
                 menu.getItems().addAll(disconnect, rename);
             }
+        } else if (label != null) {
+            setSelection(List.of());
+            selectedWire = null;
+            selectedLabel = label.label().id();
+            var delete = new MenuItem("Delete label (Del)");
+            delete.setOnAction(a -> deleteSelected());
+            var rename = new MenuItem("Rename net " + label.net().name() + "...");
+            rename.setOnAction(a -> renameNet(label.net()));
+            menu.getItems().addAll(delete, rename);
+            showProperties();
+            redraw();
         } else if (component != null) {
-            workbench.select(component.id());
+            if (!selection.contains(component.id())) {
+                setSelection(List.of(component.id()));
+            }
+            int count = selection.size();
             var rotate = new MenuItem("Rotate (R)");
             rotate.setOnAction(a -> rotateSelected());
-            var delete = new MenuItem("Delete (Del)");
+            var delete = new MenuItem(count > 1 ? "Delete " + count + " components (Del)" : "Delete (Del)");
             delete.setOnAction(a -> deleteSelected());
-            menu.getItems().addAll(rotate, delete);
+            var copyItem = new MenuItem("Copy");
+            copyItem.setOnAction(a -> copy());
+            var duplicateItem = new MenuItem("Duplicate");
+            duplicateItem.setOnAction(a -> duplicate());
+            menu.getItems().addAll(rotate, delete, copyItem, duplicateItem);
             if (component.definitionId().startsWith("project.")) {
                 var edit = new MenuItem("Edit part " + component.definitionId() + "...");
                 edit.setOnAction(a -> openPartEditor(component.definitionId()));
                 menu.getItems().add(edit);
             }
         } else if (wire != null) {
+            setSelection(List.of());
+            selectedLabel = null;
             selectedWire = wire.wire().id();
-            workbench.select(null);
             var start = new MenuItem("Start wire here (tee)");
             start.setOnAction(a -> {
                 wireStart = Anchor.of(wire);
                 bends.clear();
                 redraw();
             });
+            var addLabel = new MenuItem("Add net label here...");
+            addLabel.setOnAction(a -> labelWire(wire));
             var delete = new MenuItem("Delete wire (Del)");
             delete.setOnAction(a -> deleteSelected());
             var rename = new MenuItem("Rename net " + wire.net().name() + "...");
             rename.setOnAction(a -> renameNet(wire.net()));
-            menu.getItems().addAll(start, delete, rename);
+            menu.getItems().addAll(start, addLabel, delete, rename);
             showProperties();
             redraw();
+        } else if (clip != null) {
+            var pasteItem = new MenuItem("Paste here");
+            pasteItem.setOnAction(a -> {
+                boolean inside = mouseInside;
+                mouseInside = true;
+                paste();
+                mouseInside = inside;
+            });
+            menu.getItems().add(pasteItem);
         } else {
             return;
         }
@@ -680,27 +983,49 @@ final class SchematicPane {
         return prefix + (max + 1);
     }
 
+    /** Rotates one part in place, or a group by 90° clockwise about its centre so the parts keep their layout. */
     private void rotateSelected() {
-        ComponentView c = selectedComponent();
-        if (c != null) {
+        List<ComponentView> group = selectedComponents();
+        if (group.size() == 1) {
+            ComponentView c = group.getFirst();
             workbench.apply(List.of(new MoveOp(c.id().toString(), c.xMm(), c.yMm(), (c.rotation() + 90) % 360)));
+        } else if (!group.isEmpty()) {
+            double cx = snap(group.stream().mapToDouble(ComponentView::xMm).average().orElse(0));
+            double cy = snap(group.stream().mapToDouble(ComponentView::yMm).average().orElse(0));
+            var moves = new ArrayList<Operation>();
+            for (ComponentView c : group) {
+                moves.add(new MoveOp(c.id().toString(), snap(cx - (c.yMm() - cy)), snap(cy + (c.xMm() - cx)),
+                        (c.rotation() + 90) % 360));
+            }
+            workbench.apply(moves);
         }
     }
 
     private void deleteSelected() {
-        if (selectedWire != null && workbench.selected() == null) {
+        if (selectedLabel != null) {
+            UUID id = selectedLabel;
+            selectedLabel = null;
+            workbench.apply(List.of(new DeleteNetLabelOp(id)));
+            workbench.status("Deleted net label");
+            return;
+        }
+        if (selectedWire != null && selection.isEmpty()) {
             UUID id = selectedWire;
             selectedWire = null;
             workbench.apply(List.of(new DeleteWireOp(id)));
             workbench.status("Deleted wire (pins stay connected; disconnect pins to change the netlist)");
             return;
         }
-        ComponentView c = selectedComponent();
-        if (c != null) {
-            workbench.select(null);
-            workbench.apply(List.of(new DeleteComponentOp(c.id().toString())));
-            workbench.status("Deleted " + c.reference());
+        deleteComponents(selectedComponents());
+    }
+
+    private void deleteComponents(List<ComponentView> group) {
+        if (group.isEmpty()) {
+            return;
         }
+        setSelection(List.of());
+        workbench.apply(group.stream().<Operation>map(c -> new DeleteComponentOp(c.id().toString())).toList());
+        workbench.status("Deleted " + String.join(", ", group.stream().map(ComponentView::reference).toList()));
     }
 
     private void renameNet(NetView net) {
@@ -713,15 +1038,24 @@ final class SchematicPane {
 
     private void updateHint() {
         hint.setText(switch (tool) {
-            case SELECT -> "Drag parts to move \u2022 click pins to wire \u2022 click a wire to select \u2022 R rotate "
-                    + "\u2022 Del delete \u2022 wheel zoom";
+            case SELECT -> "Click or box-select parts \u2022 Shift/Ctrl-click adds \u2022 drag to move \u2022 click pins "
+                    + "to wire \u2022 R rotate \u2022 Del delete \u2022 Ctrl+C/V/D copy, paste, duplicate \u2022 middle "
+                    + "button or Space+drag pans";
             case PLACE -> "Click to place \u2022 Shift-click places repeatedly \u2022 Esc to stop";
             case WIRE -> "Click a pin or wire \u2022 click empty space to bend \u2022 click a pin or wire to finish "
                     + "\u2022 Backspace undoes a bend \u2022 Esc cancels";
+            case LABEL -> "Click a pin or wire and type a net name \u2022 equal labels connect without wires "
+                    + "\u2022 Esc to stop";
         });
     }
 
     // ---- Property sheet ----
+
+    private static Label wrapped(String text) {
+        var label = new Label(text);
+        label.setWrapText(true);
+        return label;
+    }
 
     private void showProperties() {
         properties.getChildren().clear();
@@ -730,6 +1064,44 @@ final class SchematicPane {
             return;
         }
         ComponentView c = selectedComponent();
+        if (selectedLabel != null) {
+            for (NetView net : project.nets()) {
+                for (NetLabelView label : net.labels()) {
+                    if (label.id().equals(selectedLabel)) {
+                        var title = new Label("Net label " + net.name());
+                        title.setFont(Font.font(15));
+                        var delete = new Button("Delete label");
+                        delete.setOnAction(e -> deleteSelected());
+                        var rename = new Button("Rename net...");
+                        rename.setOnAction(e -> renameNet(net));
+                        properties.getChildren().addAll(title, new Label(label.pinId() != null ? "On a pin"
+                                        : "On a wire of the net"), new Label(net.pinIds().size() + " pin(s) and "
+                                        + net.labels().size() + " label(s) on this net"), new HBox(6, delete, rename),
+                                new Separator(), wrapped("Pins labelled with the same name are one net, with or "
+                                        + "without wires between them."));
+                        return;
+                    }
+                }
+            }
+        }
+        if (selection.size() > 1) {
+            List<ComponentView> group = selectedComponents();
+            var title = new Label(group.size() + " components selected");
+            title.setFont(Font.font(15));
+            var rotate = new Button("Rotate");
+            rotate.setOnAction(e -> rotateSelected());
+            var delete = new Button("Delete");
+            delete.setOnAction(e -> deleteSelected());
+            var copyButton = new Button("Copy");
+            copyButton.setOnAction(e -> copy());
+            var duplicateButton = new Button("Duplicate");
+            duplicateButton.setOnAction(e -> duplicate());
+            properties.getChildren().addAll(title, wrapped(String.join(", ",
+                            group.stream().map(ComponentView::reference).toList())),
+                    new HBox(6, rotate, delete), new HBox(6, copyButton, duplicateButton), new Separator(),
+                    wrapped("Drag any selected part to move the group. Shift/Ctrl-click adds or removes parts."));
+            return;
+        }
         if (c == null && selectedWire != null) {
             for (NetView net : project.nets()) {
                 for (WireView wire : net.wires()) {
@@ -873,10 +1245,18 @@ final class SchematicPane {
         }
         var positions = new HashMap<UUID, double[]>();
         var components = new ArrayList<ComponentView>();
+        var moving = new HashSet<UUID>();
+        double ddx = 0;
+        double ddy = 0;
+        if (dragging != null && dragMoved) {
+            movingComponents().forEach(c -> moving.add(c.id()));
+            ddx = snap(mmX(mouseX) - dragDx) - dragging.xMm();
+            ddy = snap(mmY(mouseY) - dragDy) - dragging.yMm();
+        }
         for (ComponentView c : project.components()) {
             ComponentView shown = c;
-            if (dragging != null && dragMoved && c.id().equals(dragging.id())) {
-                shown = withPosition(c, snap(mmX(mouseX) - dragDx), snap(mmY(mouseY) - dragDy));
+            if (moving.contains(c.id())) {
+                shown = withPosition(c, c.xMm() + ddx, c.yMm() + ddy);
             }
             components.add(shown);
             for (PinView p : shown.pins()) {
@@ -884,9 +1264,8 @@ final class SchematicPane {
             }
         }
         drawNets(g, positions);
-        UUID selected = workbench.selected();
         for (ComponentView c : components) {
-            boolean isSelected = c.id().equals(selected);
+            boolean isSelected = selection.contains(c.id());
             g.save();
             g.translate(sx(c.xMm()), sy(c.yMm()));
             g.scale(scale, scale);
@@ -898,6 +1277,9 @@ final class SchematicPane {
             g.setFill(isSelected ? SELECTED : INK);
             Symbols.drawLabels(g, c, sx(c.xMm()), sy(c.yMm()), scale);
             for (PinView p : c.pins()) {
+                if (Symbols.hidden(c.kind(), p.number()) && !netByPin.containsKey(p.id())) {
+                    continue;
+                }
                 double[] at = positions.get(p.id());
                 boolean connected = netByPin.containsKey(p.id());
                 double r = Math.max(2, scale * 0.35);
@@ -910,6 +1292,18 @@ final class SchematicPane {
                     g.strokeOval(sx(at[0]) - r, sy(at[1]) - r, 2 * r, 2 * r);
                 }
             }
+        }
+        drawLabels(g, positions, components);
+        if (rubberBand && dragMoved) {
+            double x = Math.min(pressX, mouseX);
+            double y = Math.min(pressY, mouseY);
+            g.setFill(Color.web("#1565c0", 0.08));
+            g.fillRect(x, y, Math.abs(mouseX - pressX), Math.abs(mouseY - pressY));
+            g.setStroke(SELECTED);
+            g.setLineWidth(1);
+            g.setLineDashes(4, 3);
+            g.strokeRect(x, y, Math.abs(mouseX - pressX), Math.abs(mouseY - pressY));
+            g.setLineDashes();
         }
         if (wireStart != null) {
             var preview = new ArrayList<double[]>();
@@ -977,9 +1371,59 @@ final class SchematicPane {
             }
             double[] first = !points.isEmpty() ? points.getFirst()
                     : paths.isEmpty() ? null : paths.values().iterator().next().getFirst();
-            if (first != null) {
+            if (first != null && net.labels().isEmpty()) {
                 g.setFill(Color.web("#2e7d32"));
                 g.fillText(net.name(), sx(first[0]) + 4, sy(first[1]) - 4);
+            }
+        }
+    }
+
+    /**
+     * Net labels as flags pointing at their pin or wire point, on the side away from the part body; the drawn boxes are
+     * kept for hit testing.
+     */
+    private void drawLabels(GraphicsContext g, Map<UUID, double[]> positions, List<ComponentView> components) {
+        labelBoxes.clear();
+        var centreOfPin = new HashMap<UUID, double[]>();
+        for (ComponentView c : components) {
+            c.pins().forEach(p -> centreOfPin.put(p.id(), new double[] {c.xMm(), c.yMm()}));
+        }
+        Font font = Font.font("System", javafx.scene.text.FontWeight.BOLD, Math.max(9, Math.min(13, scale * 1.3)));
+        g.setFont(font);
+        var measure = new Text();
+        measure.setFont(font);
+        for (NetView net : project.nets()) {
+            measure.setText(net.name());
+            double textWidth = measure.getLayoutBounds().getWidth();
+            double height = measure.getLayoutBounds().getHeight() + 4;
+            double width = textWidth + 10 + height / 2;
+            for (NetLabelView label : net.labels()) {
+                double[] at = label.pinId() != null ? positions.get(label.pinId())
+                        : label.point() == null ? null : new double[] {label.point().xMm(), label.point().yMm()};
+                if (at == null) {
+                    continue;
+                }
+                double[] centre = label.pinId() == null ? null : centreOfPin.get(label.pinId());
+                boolean left = centre != null && at[0] < centre[0] - 1e-6;
+                double ax = sx(at[0]);
+                double ay = sy(at[1]);
+                double gap = 4;
+                double x = left ? ax - gap - width : ax + gap;
+                double y = ay - height / 2;
+                boolean isSelected = label.id().equals(selectedLabel);
+                double tip = height / 2;
+                double[] xs = left ? new double[] {x, x + width - tip, x + width, x + width - tip, x}
+                        : new double[] {x, x + tip, x + width, x + width, x + tip};
+                double[] ys = left ? new double[] {y, y, ay, y + height, y + height}
+                        : new double[] {ay, y, y, y + height, y + height};
+                g.setFill(isSelected ? Color.web("#e3f2fd") : Color.web("#fffde7"));
+                g.fillPolygon(xs, ys, 5);
+                g.setStroke(isSelected ? SELECTED : Color.web("#2e7d32"));
+                g.setLineWidth(isSelected ? 2 : 1.2);
+                g.strokePolygon(xs, ys, 5);
+                g.setFill(isSelected ? SELECTED : Color.web("#1b5e20"));
+                g.fillText(net.name(), left ? x + 4 : x + tip + 2, y + height - 5);
+                labelBoxes.add(new LabelBox(label, net, x, y, width, height));
             }
         }
     }

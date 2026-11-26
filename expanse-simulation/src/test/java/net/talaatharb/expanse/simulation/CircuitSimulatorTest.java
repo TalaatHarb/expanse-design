@@ -164,6 +164,90 @@ class CircuitSimulatorTest {
     }
 
     @Test
+    void diodeConductsForwardAndBlocksReverse() {
+        place("VCC", "builtin.power-rail", Map.of("voltage", "5"));
+        place("R1", "builtin.resistor", Map.of("resistance", "1k"));
+        place("D1", "builtin.diode", Map.of());
+        place("G1", "builtin.ground", Map.of());
+        connect("VCC", "VCC.1", "R1.1");
+        connect("ANODE", "R1.2", "D1.A");
+        connect("GND", "D1.K", "G1.1");
+        var forward = simulator.simulate(project, Options.operatingPoint());
+        assertThat(forward.nodeVoltages().get("ANODE")).isBetween(0.55, 0.8);
+        assertThat(forward.pinCurrents().get("D1").get("1")).isCloseTo(4.35e-3, withinPercentage(3));
+
+        project = Project.create("reverse");
+        place("VCC", "builtin.power-rail", Map.of("voltage", "5"));
+        place("R1", "builtin.resistor", Map.of("resistance", "1k"));
+        place("D1", "builtin.diode", Map.of());
+        place("G1", "builtin.ground", Map.of());
+        connect("VCC", "VCC.1", "R1.1");
+        connect("CATHODE", "R1.2", "D1.K");
+        connect("GND", "D1.A", "G1.1");
+        var reverse = simulator.simulate(project, Options.operatingPoint());
+        assertThat(reverse.nodeVoltages().get("CATHODE")).isCloseTo(5, within(1e-3));
+        assertThat(Math.abs(reverse.pinCurrents().get("D1").get("1"))).isLessThan(1e-7);
+    }
+
+    @Test
+    void ledDropsItsForwardVoltageWithSeriesResistor() {
+        place("VCC", "builtin.power-rail", Map.of("voltage", "5"));
+        place("R1", "builtin.resistor", Map.of("resistance", "330"));
+        place("D1", "builtin.led", Map.of("color", "blue", "forwardVoltage", "3.2"));
+        place("G1", "builtin.ground", Map.of());
+        connect("VCC", "VCC.1", "R1.1");
+        connect("ANODE", "R1.2", "D1.A");
+        connect("GND", "D1.K", "G1.1");
+        var result = simulator.simulate(project, Options.operatingPoint());
+        assertThat(result.nodeVoltages().get("ANODE")).isBetween(3.0, 3.2);
+        assertThat(result.pinCurrents().get("D1").get("1")).isBetween(5e-3, 6.5e-3);
+    }
+
+    @Test
+    void opAmpFollowsAmplifiesAndClipsAtTheRails() {
+        assertThat(opAmp(false, "0", "1").get("OUT")).isCloseTo(2, within(1e-3));
+        assertThat(opAmp(false, "10k", "10k").get("OUT")).isCloseTo(4, within(1e-2));
+        var clipped = opAmp(true, "1k", "100k");
+        assertThat(clipped.get("OUT")).isBetween(-15.0, -14.0);
+        var inverting = opAmp(true, "10k", "20k");
+        assertThat(inverting.get("OUT")).isCloseTo(-4, within(1e-2));
+        assertThat(inverting.get("INN")).isCloseTo(0, within(1e-3));
+    }
+
+    /**
+     * Op-amp on ±15 V with a 2 V input. Non-inverting: IN+ driven, {@code rIn} from IN- to ground (0 = follower);
+     * inverting: IN+ grounded, {@code rIn} from the input to IN-. {@code rF} is always OUT to IN-.
+     */
+    private Map<String, Double> opAmp(boolean inverting, String rIn, String rF) {
+        project = Project.create("opamp");
+        place("VP", "builtin.power-rail", Map.of("voltage", "15"));
+        place("VN", "builtin.power-rail", Map.of("voltage", "-15"));
+        place("VS", "builtin.dc-source", Map.of("voltage", "2"));
+        place("U1", "builtin.opamp", Map.of());
+        place("RF", "builtin.resistor", Map.of("resistance", rF));
+        place("G1", "builtin.ground", Map.of());
+        connect("VPLUS", "VP.1", "U1.V+");
+        connect("VMINUS", "VN.1", "U1.V-");
+        connect("OUT", "U1.OUT", "RF.1");
+        if (inverting) {
+            place("RI", "builtin.resistor", Map.of("resistance", rIn));
+            connect("VIN", "VS.+", "RI.1");
+            connect("INN", "RI.2", "U1.IN-", "RF.2");
+            connect("GND", "VS.-", "U1.IN+", "G1.1");
+        } else if (rIn.equals("0")) {
+            connect("VIN", "VS.+", "U1.IN+");
+            connect("INN", "U1.IN-", "RF.2");
+            connect("GND", "VS.-", "G1.1");
+        } else {
+            place("RI", "builtin.resistor", Map.of("resistance", rIn));
+            connect("VIN", "VS.+", "U1.IN+");
+            connect("INN", "U1.IN-", "RF.2", "RI.1");
+            connect("GND", "VS.-", "RI.2", "G1.1");
+        }
+        return simulator.simulate(project, Options.operatingPoint()).nodeVoltages();
+    }
+
+    @Test
     void invalidCircuitsAndRequestsAreRejectedWithCodes() {
         place("R1", "builtin.resistor", Map.of());
         place("R2", "builtin.resistor", Map.of());

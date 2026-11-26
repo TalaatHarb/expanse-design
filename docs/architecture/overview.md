@@ -71,8 +71,11 @@ transaction durability; filesystem export additionally uses a sibling temporary
 file, backup, and atomic replacement. Unsupported atomic replacement is reported
 as an error, never silently downgraded.
 
-Flyway migration versions and JSON schema versions are separate. Schema `0.3`
-is current: it adds drawn wires on nets (pin or free ends, bend points) and
+Flyway migration versions and JSON schema versions are separate. Schema `0.4`
+is current: it adds net labels (on a pin or a free point) to nets; a label name
+is the net's identity for connectivity, so placing a label with an existing
+net's name joins that net. `0.3` documents migrate by adding empty label lists.
+Schema `0.3` added drawn wires on nets (pin or free ends, bend points) and
 project part definitions; `0.2` documents migrate by adding empty lists. Schema
 `0.2` added typed definitions (kind, parameters, footprint, body),
 component properties and rotation, and the board (outline, rules, placements,

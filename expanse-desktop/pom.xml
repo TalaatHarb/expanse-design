@@ -6,8 +6,17 @@
         <dependency><groupId>net.talaatharb</groupId><artifactId>expanse-connector</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.openjfx</groupId><artifactId>javafx-controls</artifactId><version>${javafx.version}</version></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+        <dependency><groupId>org.testfx</groupId><artifactId>testfx-junit5</artifactId><version>${testfx.version}</version><scope>test</scope></dependency>
+        <dependency><groupId>org.testfx</groupId><artifactId>openjfx-monocle</artifactId><version>${monocle.version}</version><scope>test</scope></dependency>
     </dependencies>
     <build><plugins>
+        <!-- The GUI journeys (WorkbenchGuiTest) drive the real desktop against the reactor-built server jar, started
+             as the local-mode child process. They are skipped when that jar has not been built. -->
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId>
+            <configuration><systemPropertyVariables>
+                <expanse.ui-tests.server-jar>${project.basedir}/../expanse-server/target/expanse-server-${project.version}.jar</expanse.ui-tests.server-jar>
+            </systemPropertyVariables></configuration>
+        </plugin>
         <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId>
             <executions><execution><id>client-boundary</id><goals><goal>enforce</goal></goals>
                 <configuration><rules><bannedDependencies><excludes>

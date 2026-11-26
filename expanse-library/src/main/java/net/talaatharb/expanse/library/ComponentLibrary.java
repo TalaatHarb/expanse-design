@@ -3,6 +3,7 @@ package net.talaatharb.expanse.library;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import net.talaatharb.expanse.domain.Design.Body;
 import net.talaatharb.expanse.domain.Design.Definition;
 import net.talaatharb.expanse.domain.Design.Footprint;
@@ -13,6 +14,8 @@ import net.talaatharb.expanse.domain.DesignException;
 
 /** Built-in, versioned component definitions. Projects keep a snapshot of the definition they were placed with. */
 public final class ComponentLibrary {
+    /** LED colours; {@code color} only changes the 3D body and symbol tint, not the electrical model. */
+    public static final List<String> LED_COLORS = List.of("red", "yellow", "green", "blue", "white");
     private static final Footprint VIRTUAL = new Footprint("virtual", List.of(), 0, 0);
     private static final Body NO_BODY = new Body("none", 0, 0, 0, "#000000");
     private final List<Definition> definitions = List.of(
@@ -47,6 +50,18 @@ public final class ComponentLibrary {
                     List.of(numeric("thresholdVoltage", "V", "2"), numeric("transconductance", "A/V^2", "100m"))),
             transistor("builtin.pmos", "P-channel MOSFET (TO-92)", "pmos", mosPins(),
                     List.of(numeric("thresholdVoltage", "V", "-2"), numeric("transconductance", "A/V^2", "100m"))),
+            new Definition("builtin.diode", "1.0", "Diode (small signal, DO-35)", "diode", twoPin("A", "K"),
+                    List.of(numeric("saturationCurrent", "A", "2.5n"), numeric("emissionCoefficient", "", "1.75")),
+                    axial("D_DO-35_P7.62mm", 7.62), new Body("axial", 4, 1.9, 1.9, "#c0392b")),
+            new Definition("builtin.led", "1.0", "LED (5 mm)", "led", twoPin("A", "K"),
+                    List.of(new ParameterDefinition("color", "", "red", LED_COLORS),
+                            numeric("forwardVoltage", "V", "2"), numeric("emissionCoefficient", "", "2")),
+                    new Footprint("LED_D5.0mm", List.of(pad("1", -1.27, 0, 1.8, 0.9), pad("2", 1.27, 0, 1.8, 0.9)),
+                            6, 6), new Body("cylinder", 5, 5, 8.6, "#e53935")),
+            dip("builtin.opamp", "1.0", "Op-amp (single, DIP-8)", "opamp",
+                    List.of("NULL1", "IN-", "IN+", "V-", "NULL2", "OUT", "V+", "NC"),
+                    Set.of("IN-", "IN+", "V-", "OUT", "V+"),
+                    List.of(numeric("openLoopGain", "", "100k"), numeric("outputResistance", "ohm", "75"))),
             new Definition("builtin.logic-input", "1.0", "Logic input (constant)", "logic-input",
                     List.of(new PinDefinition("1", "OUT", true)),
                     List.of(new ParameterDefinition("level", "", "low", List.of("low", "high")),
@@ -143,18 +158,30 @@ public final class ComponentLibrary {
      * 2.54 mm pitch and 7.62 mm row spacing. Only the supply pins are required; unused gates may stay open.
      */
     private static Definition dip14(String id, String name, String kind, List<String> pinNames) {
+        return dip(id, "1.0", name, kind, pinNames, Set.of("VCC", "GND"),
+                List.of(numeric("propagationDelay", "s", "10n")));
+    }
+
+    /** DIP package with pins down the left column and back up the right column (top view, Y up). */
+    private static Definition dip(String id, String version, String name, String kind, List<String> pinNames,
+                                  Set<String> required, List<ParameterDefinition> parameters) {
+        int count = pinNames.size();
+        int half = count / 2;
+        double top = (half - 1) * 127 / 100.0;
         List<PinDefinition> pins = new java.util.ArrayList<>();
         List<Pad> pads = new java.util.ArrayList<>();
-        for (int i = 0; i < 14; i++) {
+        for (int i = 0; i < count; i++) {
             String number = String.valueOf(i + 1);
             String pinName = pinNames.get(i);
-            pins.add(new PinDefinition(number, pinName, pinName.equals("VCC") || pinName.equals("GND")));
-            double x = i < 7 ? -3.81 : 3.81;
-            double y = i < 7 ? 7.62 - i * 2.54 : -7.62 + (i - 7) * 2.54;
+            pins.add(new PinDefinition(number, pinName, required.contains(pinName)));
+            double x = i < half ? -3.81 : 3.81;
+            double y = i < half ? top - i * 2.54 : -top + (i - half) * 2.54;
             pads.add(new Pad(number, x, y, 1.6, 1.6, 0.8));
         }
-        return new Definition(id, "1.0", name, kind, pins, List.of(numeric("propagationDelay", "s", "10n")),
-                new Footprint("DIP-14_W7.62mm", pads, 10.2, 19.6), new Body("box", 6.35, 19, 3.3, "#1c1c1c"));
+        double length = half * 2.54;
+        return new Definition(id, version, name, kind, pins, parameters,
+                new Footprint("DIP-" + count + "_W7.62mm", pads, 10.2, Math.round((length + 1.82) * 100) / 100.0),
+                new Body("box", 6.35, Math.round((length + 1.22) * 100) / 100.0, 3.3, "#1c1c1c"));
     }
 
     private static Definition transistor(String id, String name, String kind, List<PinDefinition> pins,

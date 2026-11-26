@@ -24,6 +24,10 @@ final class Symbols {
             Map.entry("capacitor", twoPinHorizontal()),
             Map.entry("inductor", twoPinHorizontal()),
             Map.entry("switch", twoPinHorizontal()),
+            Map.entry("diode", twoPinHorizontal()),
+            Map.entry("led", twoPinHorizontal()),
+            Map.entry("opamp", Map.of("2", new double[]{-LEAD, -GRID}, "3", new double[]{-LEAD, GRID},
+                    "6", new double[]{LEAD, 0}, "7", new double[]{0, -LEAD}, "4", new double[]{0, LEAD})),
             Map.entry("voltage-source", Map.of("1", new double[]{0, -LEAD}, "2", new double[]{0, LEAD})),
             Map.entry("power-rail", Map.of("1", new double[]{0, GRID})),
             Map.entry("ground", Map.of("1", new double[]{0, -GRID})),
@@ -52,6 +56,11 @@ final class Symbols {
     /** Two-input gate: A (1) upper left, B (2) lower left, Y (3) right. */
     private static Map<String, double[]> gate() {
         return Map.of("1", new double[]{-LEAD, -GRID}, "2", new double[]{-LEAD, GRID}, "3", new double[]{LEAD, 0});
+    }
+
+    /** Pins that exist on the package but not on the symbol (op-amp offset null and NC). */
+    static boolean hidden(String kind, String number) {
+        return kind.equals("opamp") && !PINS.get("opamp").containsKey(number);
     }
 
     static boolean isDip(String kind) {
@@ -112,7 +121,8 @@ final class Symbols {
     /** Half extents of the symbol body in mm after rotation, used for hit testing. */
     static double[] halfExtents(ComponentView component) {
         double[] local = switch (component.kind()) {
-            case "resistor", "capacitor", "inductor", "switch" -> new double[]{LEAD, 2};
+            case "resistor", "capacitor", "inductor", "switch", "diode", "led" -> new double[]{LEAD, 2};
+            case "opamp" -> new double[]{LEAD, LEAD};
             case "voltage-source" -> new double[]{3.2, LEAD};
             case "power-rail", "ground" -> new double[]{2.5, 2.8};
             case "logic-input", "logic-clock" -> new double[]{LEAD, GRID};
@@ -135,6 +145,7 @@ final class Symbols {
             case "power-rail" -> "PWR";
             case "ground" -> "GND";
             case "switch" -> "SW";
+            case "diode", "led" -> "D";
             case "npn", "pnp" -> "Q";
             case "nmos", "pmos" -> "M";
             case "logic-input" -> "IN";
@@ -152,7 +163,11 @@ final class Symbols {
                 && !component.kind().equals("logic-clock")) {
             return component.kind().substring("logic-".length()).toUpperCase(java.util.Locale.ROOT);
         }
-        if (component.parameters().isEmpty()) {
+        if (component.kind().equals("led")) {
+            return component.properties().getOrDefault("color", "red");
+        }
+        if (component.parameters().isEmpty() || component.kind().equals("diode")
+                || component.kind().equals("opamp")) {
             return "";
         }
         String first = component.parameters().getFirst().name();
@@ -200,6 +215,36 @@ final class Symbols {
                 g.strokeOval(1.7, -0.5, 1, 1);
                 boolean closed = "closed".equals(component.properties().get("state"));
                 g.strokeLine(-1.8, -0.2, 1.9, closed ? -0.4 : -2.2);
+            }
+            case "diode", "led" -> {
+                lead(g, -LEAD, 0, -1.2, 0);
+                lead(g, 1.2, 0, LEAD, 0);
+                double[] xs = {-1.2, -1.2, 1.2};
+                double[] ys = {-1.4, 1.4, 0};
+                if (component.kind().equals("led")) {
+                    var ink = g.getFill();
+                    g.setFill(ledColor(component.properties().get("color")));
+                    g.fillPolygon(xs, ys, 3);
+                    g.setFill(ink);
+                    for (double dx : new double[]{-0.4, 0.8}) {
+                        g.strokeLine(dx, -1.8, dx + 1.2, -3);
+                        arrowHead(g, new double[]{dx, -1.8}, new double[]{dx + 1.4, -3.2});
+                    }
+                }
+                g.strokePolygon(xs, ys, 3);
+                g.setLineWidth(0.35);
+                g.strokeLine(1.2, -1.4, 1.2, 1.4);
+            }
+            case "opamp" -> {
+                g.strokePolygon(new double[]{-2.8, -2.8, 3}, new double[]{-3.6, 3.6, 0}, 3);
+                lead(g, -LEAD, -GRID, -2.8, -GRID);
+                lead(g, -LEAD, GRID, -2.8, GRID);
+                lead(g, 3, 0, LEAD, 0);
+                lead(g, 0, -LEAD, 0, -1.7);
+                lead(g, 0, LEAD, 0, 1.7);
+                g.strokeLine(-2.3, -GRID, -1.5, -GRID);
+                g.strokeLine(-2.3, GRID, -1.5, GRID);
+                g.strokeLine(-1.9, GRID - 0.4, -1.9, GRID + 0.4);
             }
             case "voltage-source" -> {
                 lead(g, 0, -LEAD, 0, -3);
@@ -381,6 +426,16 @@ final class Symbols {
         g.fillText(component.reference(), x, y + 4);
         g.setTextBaseline(VPos.TOP);
         g.fillText(value(component), x, y + 4);
+    }
+
+    static javafx.scene.paint.Color ledColor(String color) {
+        return switch (color == null ? "red" : color) {
+            case "yellow" -> javafx.scene.paint.Color.GOLD;
+            case "green" -> javafx.scene.paint.Color.LIMEGREEN;
+            case "blue" -> javafx.scene.paint.Color.DODGERBLUE;
+            case "white" -> javafx.scene.paint.Color.WHITESMOKE;
+            default -> javafx.scene.paint.Color.RED;
+        };
     }
 
     private static void lead(GraphicsContext g, double x1, double y1, double x2, double y2) {

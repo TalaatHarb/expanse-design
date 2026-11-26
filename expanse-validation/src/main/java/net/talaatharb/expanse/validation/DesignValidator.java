@@ -68,8 +68,9 @@ public final class DesignValidator {
             }
             var owners = project.components().stream()
                     .filter(c -> c.pins().stream().anyMatch(p -> net.pinIds().contains(p.id()))).toList();
-            // Feedback and unit chaining inside one logic IC package (e.g. QN to D) are intentional.
+            // Feedback inside one package (logic QN to D, op-amp follower OUT to IN-) is intentional.
             if (owners.size() == 1
+                    && !owners.getFirst().definition().kind().equals("opamp")
                     && !Logic.part(owners.getFirst().definition().kind()).map(Logic.Part::powered).orElse(false)) {
                 findings.add(new Finding("ERC_SINGLE_COMPONENT_NET", "WARNING",
                         "Net " + net.name() + " only connects pins of one component.", List.of(net.id())));

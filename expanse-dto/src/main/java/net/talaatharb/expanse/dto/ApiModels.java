@@ -53,7 +53,14 @@ public final class ApiModels {
                                 boolean physical, List<PinView> pins) {
     }
 
-    public record NetView(UUID id, String name, List<UUID> pinIds, List<WireView> wires) {
+    public record NetView(UUID id, String name, List<UUID> pinIds, List<WireView> wires, List<NetLabelView> labels) {
+        public NetView(UUID id, String name, List<UUID> pinIds, List<WireView> wires) {
+            this(id, name, pinIds, wires, List.of());
+        }
+    }
+
+    /** A net-name label on a pin ({@code pinId}) or at a free {@code point}; exactly one is set. */
+    public record NetLabelView(UUID id, UUID pinId, PointView point) {
     }
 
     public record PointView(double xMm, double yMm) {
@@ -155,12 +162,14 @@ public final class ApiModels {
             @JsonSubTypes.Type(value = DeleteTraceOp.class, name = "delete_trace"),
             @JsonSubTypes.Type(value = DrawWireOp.class, name = "draw_wire"),
             @JsonSubTypes.Type(value = DeleteWireOp.class, name = "delete_wire"),
+            @JsonSubTypes.Type(value = PlaceNetLabelOp.class, name = "place_net_label"),
+            @JsonSubTypes.Type(value = DeleteNetLabelOp.class, name = "delete_net_label"),
             @JsonSubTypes.Type(value = DefinePartOp.class, name = "define_part"),
             @JsonSubTypes.Type(value = DeletePartOp.class, name = "delete_part")})
     public sealed interface Operation permits PlaceOp, MoveOp, SetPropertiesOp, SetReferenceOp, DeleteComponentOp,
             ConnectOp, DisconnectOp, RenameNetOp, RenameProjectOp, SyncBoardOp, PlaceFootprintOp,
             UnplaceFootprintOp, SetBoardOp, RouteOp, AddTraceOp, DeleteTraceOp, DrawWireOp, DeleteWireOp,
-            DefinePartOp, DeletePartOp {
+            PlaceNetLabelOp, DeleteNetLabelOp, DefinePartOp, DeletePartOp {
         /** True when the operation removes user data and may need explicit approval. */
         default boolean destructive() {
             return false;
@@ -258,6 +267,23 @@ public final class ApiModels {
 
     /** Removes wire graphics only; connectivity is unchanged. */
     public record DeleteWireOp(@NotNull UUID wireId) implements Operation {
+        @Override
+        public boolean destructive() {
+            return true;
+        }
+    }
+
+    /**
+     * Labels a pin ({@code pin}) or a point ({@code xMm}/{@code yMm}) on {@code net} with {@code name}. The labelled
+     * net is renamed to {@code name}, or merged into an existing net of that name, so equal labels connect pins
+     * without wires. An unconnected pin becomes a one-pin labelled net.
+     */
+    public record PlaceNetLabelOp(@NotBlank @Size(max = 200) String name, String pin, String net, Double xMm,
+                                  Double yMm) implements Operation {
+    }
+
+    /** Removes a label; a net left with one pin and no labels is removed. */
+    public record DeleteNetLabelOp(@NotNull UUID labelId) implements Operation {
         @Override
         public boolean destructive() {
             return true;

@@ -11,13 +11,14 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class Design {
-    public static final String SCHEMA_VERSION = "0.3";
+    public static final String SCHEMA_VERSION = "0.4";
     /** Kind of user-defined parts without a simulation model; drawn as a box with pins on both sides. */
     public static final String GENERIC_KIND = "generic";
     /** Project-local part definitions use this ID prefix, so they never collide with built-in definitions. */
     public static final String PROJECT_PART_PREFIX = "project.";
     public static final Set<String> KINDS = Set.of("resistor", "capacitor", "inductor", "voltage-source",
-            "power-rail", "ground", "switch", "npn", "pnp", "nmos", "pmos", "logic-input", "logic-clock", "logic-and",
+            "power-rail", "ground", "switch", "npn", "pnp", "nmos", "pmos", "diode", "led", "opamp", "logic-input",
+            "logic-clock", "logic-and",
             "logic-or", "logic-nand", "logic-nor", "logic-xor", "logic-not", "logic-74hc00", "logic-74hc04",
             "logic-74hc08", "logic-74hc32", "logic-74hc86", "logic-74hc74", GENERIC_KIND);
     public static final Set<Integer> ROTATIONS = Set.of(0, 90, 180, 270);
@@ -207,23 +208,46 @@ public final class Design {
         }
     }
 
-    public record Net(UUID id, String name, List<UUID> pinIds, List<Wire> wires) {
+    /**
+     * A net label shows the net name on the schematic, either attached to a member pin (following it when its part
+     * moves) or at a free point. Labels carrying the same text join pins into one net, so a single pin with a label
+     * is a valid net (for example a named input that other sheets or parts will join later).
+     */
+    public record NetLabel(UUID id, UUID pinId, Point at) {
+        public NetLabel {
+            Objects.requireNonNull(id, "Net label ID");
+            require((pinId == null) != (at == null), "A net label is attached to a pin or placed at a point");
+        }
+    }
+
+    public record Net(UUID id, String name, List<UUID> pinIds, List<Wire> wires, List<NetLabel> labels) {
         public Net {
             Objects.requireNonNull(id, "Net ID");
             name = text(name, "Net name");
             pinIds = List.copyOf(pinIds);
             wires = List.copyOf(wires);
-            require(pinIds.size() >= 2, "A net requires at least two pins");
+            labels = List.copyOf(labels);
+            require(pinIds.size() >= 2 || (pinIds.size() == 1 && !labels.isEmpty()),
+                    "A net requires at least two pins, or one labelled pin");
             unique(pinIds, "net member");
             require(wires.size() <= 10_000, "A net supports at most 10000 wires");
+            require(labels.size() <= 1_000, "A net supports at most 1000 labels");
+        }
+
+        public Net(UUID id, String name, List<UUID> pinIds, List<Wire> wires) {
+            this(id, name, pinIds, wires, List.of());
         }
 
         public Net(UUID id, String name, List<UUID> pinIds) {
-            this(id, name, pinIds, List.of());
+            this(id, name, pinIds, List.of(), List.of());
         }
 
         public Net withWires(List<Wire> nextWires) {
-            return new Net(id, name, pinIds, nextWires);
+            return new Net(id, name, pinIds, nextWires, labels);
+        }
+
+        public Net withLabels(List<NetLabel> nextLabels) {
+            return new Net(id, name, pinIds, wires, nextLabels);
         }
     }
 
@@ -336,6 +360,11 @@ public final class Design {
                     require((wire.fromPinId() == null || net.pinIds().contains(wire.fromPinId()))
                                     && (wire.toPinId() == null || net.pinIds().contains(wire.toPinId())),
                             "Wire ends must attach to pins of their net");
+                }
+                for (var label : net.labels()) {
+                    require(ids.add(label.id()), "Duplicate entity ID");
+                    require(label.pinId() == null || net.pinIds().contains(label.pinId()),
+                            "Net labels must attach to pins of their net");
                 }
                 long sheetCount = components.stream()
                         .filter(c -> c.pins().stream().anyMatch(p -> net.pinIds().contains(p.id())))

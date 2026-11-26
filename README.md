@@ -27,27 +27,32 @@ One switched RLC circuit followed through every view of the workbench:
 </table>
 
 Implemented for **resistors, capacitors, inductors, DC sources, power rails,
-ground, SPST switches, NPN/PNP BJTs, N/P-channel MOSFETs, logic gates/sources and
-sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every layer:
+ground, SPST switches, diodes, LEDs, op-amps, NPN/PNP BJTs, N/P-channel MOSFETs,
+logic gates/sources and sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every layer:
 
 - **Schematic**: palette placement, drag/rotate/delete, drawn wires with bends,
-  tees and junction dots (saved in the project), net rename/disconnect, property
-  editing, electrical rule checks.
+  tees and junction dots (saved in the project), net labels (pins with the same
+  label are connected without wires), multi-select (box or Shift/Ctrl-click) with
+  group move/rotate/delete, cut/copy/paste/duplicate, net rename/disconnect,
+  property editing, electrical rule checks.
 - **Part editor**: project-specific parts with pins, parameters, DIP/SIP pad
   generator, courtyard and 3D body; `generic` parts or parts that reuse a
   built-in simulation model. Parts are stored inside the project file.
 - **Undo/redo** (Ctrl+Z, Ctrl+Y / Ctrl+Shift+Z) for every edit, from the desktop,
-  REST or MCP; each step is a new revision so other clients see it.- **Simulation**: in-house MNA engine (DC operating point and transient with
-  switch events); node voltages, pin currents, power and waveforms. Logic parts
+  REST or MCP; each step is a new revision so other clients see it.
+- **Simulation**: in-house MNA engine (DC operating point and transient with
+  switch events); node voltages, pin currents, power and waveforms. Diodes and
+  LEDs use a Shockley model (LED saturation current derived from its forward
+  voltage); op-amps have a tanh-limited open-loop gain to their supply rails. Logic parts
   have behavioural analog models, and a separate event-driven four-state
   (0/1/X/Z) logic analysis produces timing diagrams.
 - **PCB**: board outline and rules, footprint sync/placement, two-layer
   orthogonal routing, ratsnest, shorts/clearance/outline DRC.
 - **3D**: parametric component bodies on the board (orthographic JavaFX 3D view with a camera rig after
   Oracle's sample application), collision/overhang checks, STL/OBJ overlay import.
-- **Persistence**: canonical JSON schema 0.3 (0.1 and 0.2 files migrate on open), H2 file
+- **Persistence**: canonical JSON schema 0.4 (0.1-0.3 files migrate on open), H2 file
   or PostgreSQL storage, atomic file save with `.bak`, revision conflict detection.
-- **MCP**: 33 policy-gated tools over stdio, including transactional change sets.
+- **MCP**: 34 policy-gated tools over stdio, including transactional change sets.
 
 All edits from the desktop, REST and MCP go through one transactional change-set
 engine: a batch of operations is previewed or applied as a single revision.
@@ -124,15 +129,24 @@ Override the data directory with `EXPANSE_DATA_DIR` or desktop
   placing). To wire, click a pin (or, with the Wire tool, an existing wire), click
   empty space to add bends (Backspace removes one), and finish on a pin or wire;
   Esc cancels. Click a wire to select it; Del deletes it (pins stay connected).
+  With the Label tool (L), click a pin or wire and type a net name: every pin
+  labelled with the same name joins that net. Right-click a label to rename or
+  delete it.
   Nets without drawn wires are shown auto-routed; pins that a net's wires do not
   reach yet are joined by dashed lines. Drag to move, R rotates, Del deletes,
-  wheel zooms, drag empty space pans. Right-click pins or wires to disconnect or
+  wheel zooms; drag empty space to box-select, Shift/Ctrl-click to add or remove
+  parts, and middle-drag or Space+drag to pan. R rotates a group around its
+  centre. Esc cancels, leaves a tool, then clears the selection. Right-click pins or wires to disconnect or
   rename nets; edit values in the property sheet. *Check (ERC)* lists findings.
 - **Part editor** (*Design > Part editor...*, Ctrl+E, or the button under the
   palette): define pins (`number, name[, optional]`), parameters, pads (or
   generate DIP/SIP pads), courtyard and 3D body. Project parts appear at the top
   of the palette; editing a placed part updates its instances.
-- **Edit > Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z).
+- **Edit > Undo / Redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z), **Cut / Copy /
+  Paste / Duplicate / Select all** (Ctrl+X, C, V, D, A). Copies keep connections
+  and labels between the copied parts and their wires, renumber references and
+  bring along project parts; paste lands at the mouse pointer. Free-standing
+  labels and wires with two free ends are not copied.
 - **File > Settings...** (Ctrl+,): mode (local or remote), server URL, API token
   and data directory, saved to `%USERPROFILE%\.expanse-design\settings.properties`
   (move it with `--expanse.settings-file=...`). *Save and reconnect* switches
@@ -251,8 +265,8 @@ only protocol messages; logs go to stderr.
 
 The bridge exposes 18 read-only tools (projects, components, nets, library,
 project parts, diagnostics, simulation, PCB board/analysis, 3D scene/checks,
-undo history, change preview), 13 editing tools (`project.create`,
-`project.apply_changes`, placement, wiring, drawn wires, part definitions,
+undo history, change preview), 14 editing tools (`project.create`,
+`project.apply_changes`, placement, wiring, drawn wires, net labels, part definitions,
 properties, board sync/placement/routing, undo/redo) and 2 destructive tools. Policy
 switches: `--expanse.mcp.allow-mutations=false` exposes only read tools;
 `--expanse.mcp.allow-destructive=true` additionally exposes deletes and lets
@@ -263,7 +277,7 @@ read-only/destructive/idempotent hints. See [MCP and security](docs/architecture
 
 - [Architecture and decisions](docs/architecture/overview.md)
 - [Implementation roadmap and acceptance coverage](docs/implementation-roadmap.md)
-- [Project schema 0.3](schemas/project/0.3.schema.json),
+- [Project schema 0.4](schemas/project/0.4.schema.json),
   [all-parts fixture](fixtures/projects/all-parts.json), and the
   legacy [0.1](fixtures/projects/legacy/resistor-loop-0.1.json) and
   [0.2](fixtures/projects/legacy/logic-demo-0.2.json) fixtures used for migration tests
@@ -274,8 +288,17 @@ always does this.
 
 `verify` runs the headless domain, simulation, PCB, assembly, JSON/schema and
 migration, persistence, REST/Feign, concurrency, file-save, desktop session and
-model-import, local-runtime (token/embedded server), and stdio MCP contracts.
-PostgreSQL integration is opt-in locally and enabled in Linux/Java 21 CI
+model-import, local-runtime (token/embedded server), and stdio MCP contracts,
+plus automated desktop GUI journeys (TestFX, headless Monocle) that start the
+real local server and build, simulate, save and reopen a circuit, undo/redo,
+connect pins by net labels, and box-select/move/copy/paste/delete a group. Watch
+them run on screen with:
+
+```powershell
+.\mvnw.cmd -pl expanse-server,expanse-desktop -am verify "-Dtest=WorkbenchGuiTest" "-Dsurefire.failIfNoSpecifiedTests=false" "-Dexpanse.ui-tests.headless=false"
+```
+
+The GUI tests are skipped when the server jar has not been built. PostgreSQL integration is opt-in locally and enabled in Linux/Java 21 CI
 (requires Docker):
 
 ```powershell

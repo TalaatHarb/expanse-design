@@ -141,7 +141,7 @@ class McpContractTest {
         var schema = WorkbenchTools.operationsSchema();
         @SuppressWarnings("unchecked")
         var variants = (List<Map<String, Object>>) ((Map<String, Object>) schema.get("items")).get("oneOf");
-        assertThat(variants).hasSize(20);
+        assertThat(variants).hasSize(22);
         var place = variants.stream().filter(v -> ((Map<?, ?>) v.get("properties")).get("op")
                 .equals(Map.of("const", "place_component"))).findFirst().orElseThrow();
         assertThat((List<Object>) place.get("required"))

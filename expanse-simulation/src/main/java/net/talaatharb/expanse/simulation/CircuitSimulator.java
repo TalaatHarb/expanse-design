@@ -31,6 +31,9 @@ public final class CircuitSimulator {
     private static final double GMIN = 1e-12;
     private static final double VT = 0.025852;
     private static final double OFF_CONDUCTANCE = 1e-12;
+    /** LEDs are specified by their forward voltage at this current. */
+    static final double LED_REFERENCE_CURRENT = 0.02;
+    private static final double OPAMP_MIN_SLOPE = 1e-3;
     /** Output resistance of behavioural logic outputs. */
     static final double LOGIC_OUTPUT_OHMS = 50;
     private static final int LOGIC_SETTLE_PASSES = 50;
@@ -178,6 +181,22 @@ public final class CircuitSimulator {
         }
 
         /**
+         * Shockley junction written relative to a reference point so steep LEDs stay within the exponent limit:
+         * {@code i = iRef * (exp((v - vRef) / nVt) - exp(-vRef / nVt))}. A plain diode has vRef = 0 and iRef = Is.
+         */
+        record Diode(Component component, int a, int k, double iRef, double vRef, double nVt) implements Element {
+        }
+
+        /**
+         * Op-amp: output {@code rOut} behind {@code mid + half * tanh((gain * (in+ - in-) - mid) / half)}, a smooth
+         * clamp of the open-loop gain to the supply rails. Inputs draw no current; output current is drawn from V+
+         * when sourcing and from V- when sinking.
+         */
+        record OpAmp(Component component, int inP, int inN, int out, int vPlus, int vMinus, double gain,
+                     double rOut) implements Element {
+        }
+
+        /**
          * Behavioural logic part: each output is a {@link #LOGIC_OUTPUT_OHMS} switch to the supply (VCC or, for
          * virtual parts, an implicit highVoltage) or to GND; inputs draw no current and switch at half supply.
          */
@@ -245,7 +264,7 @@ public final class CircuitSimulator {
                         node = nodes++;
                         boolean required = c.definition().pins().stream()
                                 .anyMatch(d -> d.number().equals(pin.number()) && d.required());
-                        if (required || !Logic.isLogic(c.definition().kind())) {
+                        if (required) {
                             warnings.add(name + " is unconnected; a 1 pS leakage holds it near 0 V.");
                         }
                     }
@@ -301,6 +320,21 @@ public final class CircuitSimulator {
                                 c.definition().kind().equals("nmos") ? 1 : -1, c.value("thresholdVoltage"),
                                 positive(c, "transconductance")));
                     }
+                    case "diode" -> {
+                        nonlinear = true;
+                        elements.add(new Element.Diode(c, p.get("1"), p.get("2"), positive(c, "saturationCurrent"),
+                                0, positive(c, "emissionCoefficient") * VT));
+                    }
+                    case "led" -> {
+                        nonlinear = true;
+                        elements.add(new Element.Diode(c, p.get("1"), p.get("2"), LED_REFERENCE_CURRENT,
+                                positive(c, "forwardVoltage"), positive(c, "emissionCoefficient") * VT));
+                    }
+                    case "opamp" -> {
+                        nonlinear = true;
+                        elements.add(new Element.OpAmp(c, p.get("3"), p.get("2"), p.get("6"), p.get("7"), p.get("4"),
+                                positive(c, "openLoopGain"), positive(c, "outputResistance")));
+                    }
                     case "ground" -> {
                     }
                     case Design.GENERIC_KIND -> warnings.add(c.reference() + " (" + c.definition().name()
@@ -355,6 +389,8 @@ public final class CircuitSimulator {
         String models() {
             return "R, C, L and DC sources ideal; switch = onResistance or 1 pS; BJT Ebers-Moll transport "
                     + "(betaR=1, no capacitances); MOSFET Shichman-Hodges level 1 (lambda=0); "
+                    + "diode/LED Shockley (no series resistance, breakdown or capacitance; LED Is from forwardVoltage "
+                    + "at 20 mA); op-amp tanh-limited open-loop gain to the supply rails behind outputResistance; "
                     + "logic outputs " + (int) LOGIC_OUTPUT_OHMS + " ohm to supply/GND, inputs switch at half "
                     + "supply and are sampled once per time step; 1 pS node leakage; backward-Euler integration";
         }
@@ -497,6 +533,12 @@ public final class CircuitSimulator {
                     conductance(a, m.d(), m.s(), GMIN);
                     nonlinear(a, rhs, x, new int[]{m.d(), m.g(), m.s()}, voltages -> mos(m, voltages));
                 }
+                case Element.Diode d -> {
+                    conductance(a, d.a(), d.k(), GMIN);
+                    nonlinear(a, rhs, x, new int[]{d.a(), d.k()}, voltages -> diode(d, voltages));
+                }
+                case Element.OpAmp o -> nonlinear(a, rhs, x, new int[]{o.inP(), o.inN(), o.out(), o.vPlus(),
+                        o.vMinus()}, voltages -> opAmp(o, voltages), (v, i, jacobian) -> opAmpSlope(o, v, i, jacobian));
                 case Element.LogicPart l -> {
                     double g = 1 / LOGIC_OUTPUT_OHMS;
                     List<String> outputs = l.part().outputPins();
@@ -518,6 +560,16 @@ public final class CircuitSimulator {
 
         private static void nonlinear(double[][] a, double[] rhs, double[] x, int[] terminals,
                                       Function<double[], double[]> model) {
+            nonlinear(a, rhs, x, terminals, model, null);
+        }
+
+        /**
+         * Stamps the Newton linearisation of {@code model} around {@code x} using a finite-difference Jacobian,
+         * optionally adjusted by {@code tweak}. The residual is exact, so a tweaked Jacobian only changes the
+         * convergence path, never the converged solution.
+         */
+        private static void nonlinear(double[][] a, double[] rhs, double[] x, int[] terminals,
+                                      Function<double[], double[]> model, JacobianTweak tweak) {
             double[] v0 = new double[terminals.length];
             for (int i = 0; i < terminals.length; i++) {
                 v0[i] = v(x, terminals[i]);
@@ -536,6 +588,9 @@ public final class CircuitSimulator {
                     jacobian[t][j] = (iu[t] - id[t]) / (2 * step);
                 }
             }
+            if (tweak != null) {
+                tweak.apply(v0, i0, jacobian);
+            }
             for (int t = 0; t < terminals.length; t++) {
                 if (terminals[t] < 0) {
                     continue;
@@ -548,6 +603,28 @@ public final class CircuitSimulator {
                     }
                 }
                 rhs[terminals[t]] += constant;
+            }
+        }
+
+        @FunctionalInterface
+        private interface JacobianTweak {
+            void apply(double[] voltages, double[] currents, double[][] jacobian);
+        }
+
+        /**
+         * A saturated tanh has a vanishing slope, which leaves Newton bouncing between the rails. Keep at least
+         * {@link #OPAMP_MIN_SLOPE} of the open-loop gain in the input columns so every step pulls toward the
+         * linear region.
+         */
+        private static void opAmpSlope(Element.OpAmp o, double[] v, double[] i, double[][] jacobian) {
+            double mid = (v[3] + v[4]) / 2;
+            double half = Math.max((v[3] - v[4]) / 2, 1e-3);
+            double t = Math.tanh((o.gain() * (v[0] - v[1]) - mid) / half);
+            double slope = o.gain() * Math.max(1 - t * t, OPAMP_MIN_SLOPE) / o.rOut();
+            double[] rows = {0, 0, -slope, i[2] < 0 ? slope : 0, i[2] > 0 ? slope : 0};
+            for (int r = 2; r < 5; r++) {
+                jacobian[r][0] = rows[r];
+                jacobian[r][1] = -rows[r];
             }
         }
 
@@ -591,6 +668,21 @@ public final class CircuitSimulator {
             return x <= max ? Math.exp(x) : Math.exp(max) * (1 + x - max);
         }
 
+        /** Currents flowing into anode and cathode. */
+        static double[] diode(Element.Diode d, double[] v) {
+            double i = d.iRef() * (limitedExp((v[0] - v[1] - d.vRef()) / d.nVt()) - Math.exp(-d.vRef() / d.nVt()));
+            return new double[]{i, -i};
+        }
+
+        /** Currents flowing into IN+, IN-, OUT, V+ and V-. */
+        static double[] opAmp(Element.OpAmp o, double[] v) {
+            double mid = (v[3] + v[4]) / 2;
+            double half = Math.max((v[3] - v[4]) / 2, 1e-3);
+            double target = mid + half * Math.tanh((o.gain() * (v[0] - v[1]) - mid) / half);
+            double intoOut = (v[2] - target) / o.rOut();
+            return new double[]{0, 0, intoOut, intoOut < 0 ? -intoOut : 0, intoOut > 0 ? -intoOut : 0};
+        }
+
         Map<String, Double> voltages(double[] x) {
             Map<String, Double> result = new LinkedHashMap<>();
             groundNames.forEach(name -> result.put(name, 0.0));
@@ -621,6 +713,18 @@ public final class CircuitSimulator {
                     case Element.Mos m -> {
                         double[] i = mos(m, new double[]{v(x, m.d()), v(x, m.g()), v(x, m.s())});
                         yield new double[]{i[2], i[1], i[0]};
+                    }
+                    case Element.Diode d -> diode(d, new double[]{v(x, d.a()), v(x, d.k())});
+                    case Element.OpAmp o -> {
+                        double[] i = opAmp(o, new double[]{v(x, o.inP()), v(x, o.inN()), v(x, o.out()),
+                                v(x, o.vPlus()), v(x, o.vMinus())});
+                        Map<String, Double> byPin = Map.of("3", i[0], "2", i[1], "6", i[2], "7", i[3], "4", i[4]);
+                        var definitionPins = o.component().definition().pins();
+                        double[] all = new double[definitionPins.size()];
+                        for (int k = 0; k < all.length; k++) {
+                            all[k] = byPin.getOrDefault(definitionPins.get(k).number(), 0.0);
+                        }
+                        yield all;
                     }
                     case Element.LogicPart l -> logicCurrents(l, x);
                 };

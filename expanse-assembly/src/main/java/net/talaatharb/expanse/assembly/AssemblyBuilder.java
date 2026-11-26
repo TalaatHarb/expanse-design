@@ -27,6 +27,20 @@ public final class AssemblyBuilder {
                         List<Solid> solids, List<Finding> findings) {
     }
 
+    /** LEDs tint their body by the {@code color} property; other parts use the definition colour. */
+    static String bodyColor(Component c) {
+        if (!c.definition().kind().equals("led")) {
+            return c.definition().body().color();
+        }
+        return switch (c.properties().getOrDefault("color", "red")) {
+            case "yellow" -> "#fdd835";
+            case "green" -> "#43a047";
+            case "blue" -> "#1e88e5";
+            case "white" -> "#f5f5f5";
+            default -> c.definition().body().color();
+        };
+    }
+
     public Scene build(Project project) {
         var board = project.board();
         double t = board.thicknessMm();
@@ -43,7 +57,7 @@ public final class AssemblyBuilder {
             double z = body.shape().equals("axial") ? body.depthMm() / 2 + 0.5 : body.heightMm() / 2;
             Solid solid = new Solid("body:" + c.id(), c.id(), c.reference(), "body", body.shape(), placement.xMm(),
                     placement.yMm(), z, body.widthMm(), body.depthMm(), body.heightMm(), placement.rotation(),
-                    body.color());
+                    bodyColor(c));
             bodies.add(solid);
         }
         solids.addAll(bodies);

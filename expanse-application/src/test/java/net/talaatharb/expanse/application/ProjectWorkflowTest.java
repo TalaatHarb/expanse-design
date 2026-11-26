@@ -44,13 +44,18 @@ class ProjectWorkflowTest {
                 new PlaceOp("builtin.inductor", "L1", 90, 40, 0, Map.of("inductance", "10m"), null),
                 new PlaceOp("builtin.nmos", "M1", 130, 20, 0, null, null),
                 new PlaceOp("builtin.pmos", "M2", 150, 20, 0, null, null),
+                new PlaceOp("builtin.diode", "D1", 130, 40, 90, null, null),
+                new PlaceOp("builtin.led", "D2", 150, 40, 90, Map.of("color", "green"), null),
+                new PlaceOp("builtin.opamp", "U1", 170, 20, 0, null, null),
                 new ConnectOp("VIN", List.of("V1.+", "S1.1")),
                 new ConnectOp("SW", List.of("S1.2", "RB.1")),
                 new ConnectOp("BASE", List.of("RB.2", "Q1.B")),
-                new ConnectOp("VCC", List.of("VCC.VCC", "RC.1", "Q2.E", "M2.S")),
-                new ConnectOp("OUT", List.of("RC.2", "Q1.C", "C1.1", "M1.G", "Q2.B", "M2.G")),
-                new ConnectOp("LOAD", List.of("M1.D", "L1.1", "Q2.C", "M2.D")),
-                new ConnectOp("GND", List.of("GND1.GND", "V1.-", "Q1.E", "C1.2", "M1.S", "L1.2")),
+                new ConnectOp("VCC", List.of("VCC.VCC", "RC.1", "Q2.E", "M2.S", "U1.V+")),
+                new ConnectOp("OUT", List.of("RC.2", "Q1.C", "C1.1", "M1.G", "Q2.B", "M2.G", "U1.IN+")),
+                new ConnectOp("LOAD", List.of("M1.D", "L1.1", "Q2.C", "M2.D", "D1.A", "D2.A")),
+                new ConnectOp("BUF", List.of("U1.IN-", "U1.OUT")),
+                new ConnectOp("GND", List.of("GND1.GND", "V1.-", "Q1.E", "C1.2", "M1.S", "L1.2", "D1.K", "D2.K",
+                        "U1.V-")),
                 new SyncBoardOp(),
                 new RouteOp("RC.2", "Q1.C", "top", 0.4),
                 new RouteOp("RB.2", "Q1.B", "bottom", null));
@@ -218,11 +223,57 @@ class ProjectWorkflowTest {
     }
 
     @Test
+    void netLabelsNameAndJoinNetsFollowPinsAndSurviveSaveAndLoad() {
+        UUID id = project.id();
+        service.apply(id, new ChangeSet(0, List.of(
+                new PlaceOp("builtin.resistor", "R1", 0, 0, 0, null, null),
+                new PlaceOp("builtin.resistor", "R2", 20, 0, 0, null, null),
+                new PlaceOp("builtin.resistor", "R3", 40, 0, 0, null, null),
+                new PlaceOp("builtin.ground", "G1", 60, 0, 0, null, null),
+                new PlaceNetLabelOp("IN", "R1.1", null, null, null))));
+        assertThat(net(id, "IN")).satisfies(n -> {
+            assertThat(n.pinIds()).hasSize(1);
+            assertThat(n.labels()).singleElement().satisfies(l -> assertThat(l.pinId()).isEqualTo(n.pinIds().getFirst()));
+        });
+
+        service.apply(id, new ChangeSet(1, List.of(
+                new PlaceNetLabelOp("IN", "R2.1", null, null, null),
+                new ConnectOp("X", List.of("R2.2", "R3.1")),
+                new PlaceNetLabelOp("IN", null, "X", 30.0, 5.0))));
+        var joined = net(id, "IN");
+        assertThat(joined.pinIds()).hasSize(4);
+        assertThat(joined.labels()).hasSize(3).filteredOn(l -> l.point() != null).singleElement()
+                .satisfies(l -> assertThat(l.point()).isEqualTo(new PointView(30, 5)));
+        assertThat(service.get(id).nets()).extracting(NetView::name).containsExactly("IN");
+
+        String saved = service.exportProject(id).json();
+        assertThat(json.write(json.read(saved))).isEqualTo(saved);
+
+        var r1Label = joined.labels().stream().filter(l -> l.pinId() != null && l.pinId().equals(
+                service.get(id).components().getFirst().pins().getFirst().id())).findFirst().orElseThrow();
+        service.apply(id, new ChangeSet(2, List.of(new DeleteComponentOp("R1"))));
+        assertThat(net(id, "IN").labels()).hasSize(2).noneMatch(l -> l.id().equals(r1Label.id()));
+
+        service.apply(id, new ChangeSet(3, List.of(new PlaceNetLabelOp("LONE", "G1.1", null, null, null))));
+        UUID lone = net(id, "LONE").labels().getFirst().id();
+        service.apply(id, new ChangeSet(4, List.of(new DeleteNetLabelOp(lone))));
+        assertThat(service.get(id).nets()).extracting(NetView::name).containsExactly("IN");
+        assertThatThrownBy(() -> service.apply(id, new ChangeSet(5, List.of(new DeleteNetLabelOp(lone)))))
+                .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("LABEL_NOT_FOUND"));
+        assertThatThrownBy(() -> service.apply(id, new ChangeSet(5, List.of(
+                new PlaceNetLabelOp("Y", "R2.1", "IN", 0.0, 0.0))))).isInstanceOf(DesignException.class);
+    }
+
+    private NetView net(UUID projectId, String name) {
+        return service.get(projectId).nets().stream().filter(n -> n.name().equals(name)).findFirst().orElseThrow();
+    }
+
+    @Test
     void changeSetsPreviewWithoutPersistingAndApplyAsOneRevision() {
         var preview = service.preview(project.id(), new ChangeSet(0, allPartsCircuit()));
         assertThat(preview.applied()).isFalse();
         assertThat(preview.revision()).isEqualTo(1);
-        assertThat(preview.snapshot().components()).hasSize(12);
+        assertThat(preview.snapshot().components()).hasSize(15);
         assertThat(service.get(project.id()).revision()).isZero();
         assertThat(service.get(project.id()).components()).isEmpty();
 
@@ -236,9 +287,9 @@ class ProjectWorkflowTest {
                 .containsExactlyInAnyOrderElementsOf(Design.KINDS.stream().filter(k -> !k.startsWith("logic-") && !k.equals(Design.GENERIC_KIND))
                         .flatMap(k -> k.equals("resistor") ? java.util.stream.Stream.of(k, k) : java.util.stream.Stream.of(k))
                         .toList());
-        assertThat(snapshot.board().placements()).hasSize(10);
+        assertThat(snapshot.board().placements()).hasSize(13);
         assertThat(snapshot.board().traces()).hasSize(2);
-        assertThat(snapshot.board().pads()).hasSize(24);
+        assertThat(snapshot.board().pads()).hasSize(36);
         assertThat(snapshot.components()).filteredOn(c -> c.reference().equals("RB")).singleElement()
                 .satisfies(c -> {
                     assertThat(c.rotation()).isEqualTo(90);
@@ -246,7 +297,8 @@ class ProjectWorkflowTest {
                 });
 
         var simulation = service.simulate(project.id(), new SimulationRequest("op", null, null, null, null));
-        assertThat(simulation.nodeVoltages()).containsKeys("VIN", "OUT", "LOAD", "GND");
+        assertThat(simulation.nodeVoltages()).containsKeys("VIN", "OUT", "LOAD", "GND", "BUF");
+        assertThat(simulation.nodeVoltages().get("BUF")).isCloseTo(simulation.nodeVoltages().get("OUT"), within(1e-3));
         assertThat(simulation.nodeVoltages().get("VIN")).isCloseTo(9, within(1e-6));
         assertThat(service.analyzeBoard(project.id()).airwires()).isNotEmpty();
         assertThat(service.assembly(project.id()).solids()).anyMatch(s -> s.role().equals("body"));
@@ -304,14 +356,14 @@ class ProjectWorkflowTest {
         Project reopened = json.read(saved);
         assertThat(reopened).isEqualTo(repository.get(project.id()));
         assertThat(json.write(reopened)).isEqualTo(saved);
-        assertThat(reopened.schemaVersion()).isEqualTo("0.3");
+        assertThat(reopened.schemaVersion()).isEqualTo("0.4");
 
         assertThatThrownBy(() -> service.importProject(new Document(saved)))
                 .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("PROJECT_EXISTS"));
         var copy = service.importCopy(new Document(saved));
         assertThat(copy.id()).isNotEqualTo(project.id());
         assertThat(copy.revision()).isZero();
-        assertThat(copy.components()).hasSize(12);
+        assertThat(copy.components()).hasSize(15);
         assertThat(copy.components()).extracting(ComponentView::id)
                 .doesNotContainAnyElementsOf(service.get(project.id()).components().stream().map(ComponentView::id).toList());
         assertThat(copy.board().traces()).hasSize(2);
@@ -353,7 +405,7 @@ class ProjectWorkflowTest {
     @Test
     void importRejectsUnsupportedUnknownMissingAndMalformedDataWithoutOverwriting() {
         String original = service.exportProject(project.id()).json();
-        assertThatThrownBy(() -> json.read(original.replace("\"0.3\"", "\"99.0\"")))
+        assertThatThrownBy(() -> json.read(original.replace("\"0.4\"", "\"99.0\"")))
                 .isInstanceOfSatisfying(DesignException.class,
                         e -> assertThat(e.code()).isEqualTo("UNSUPPORTED_SCHEMA"));
         assertThatThrownBy(() -> json.read(original.replaceFirst("\\{", "{\"unknown\":true,")))
@@ -371,7 +423,7 @@ class ProjectWorkflowTest {
 
     @Test
     void searchExposesKindsParametersAndReadiness() {
-        assertThat(service.search("")).hasSize(25);
+        assertThat(service.search("")).hasSize(28);
         assertThat(service.search("74hc")).hasSize(6);
         assertThat(service.search("mos")).extracting(DefinitionView::kind).containsExactlyInAnyOrder("nmos", "pmos");
         assertThat(service.search("ground")).singleElement().satisfies(d -> assertThat(d.pcbReady()).isFalse());

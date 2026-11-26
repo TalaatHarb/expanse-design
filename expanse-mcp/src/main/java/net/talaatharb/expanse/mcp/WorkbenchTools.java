@@ -229,6 +229,14 @@ public final class WorkbenchTools {
                         args.optionalString("net"), args.has("points") ? operationReader.convertValue(
                         args.values.get("points"), new TypeReference<List<PointView>>() { }) : null,
                         args.optionalString("name"))));
+        add(tools, "schematic.place_net_label", "Place net label",
+                "Label a pin (or a point on net) with a net name. The net is renamed to name, or merged into an "
+                        + "existing net of that name, so equal labels connect pins without wires. An unconnected "
+                        + "labelled pin becomes a one-pin net.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
+                        req("name", TEXT), opt("pin", PIN), opt("net", TEXT), opt("xMm", NUMBER), opt("yMm", NUMBER)),
+                args -> single(args, new PlaceNetLabelOp(args.string("name"), args.optionalString("pin"),
+                        args.optionalString("net"), args.optionalNumber("xMm"), args.optionalNumber("yMm"))));
         add(tools, "parts.define", "Define custom part",
                 "Create or replace a project part: pins, optional parameters, pads (a physical footprint; omit for "
                         + "a schematic-only part), courtyard and body. Kind defaults to generic (no simulation model). "

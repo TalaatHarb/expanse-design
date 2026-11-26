@@ -28,7 +28,8 @@ public final class LogicSimulator {
     public static final String VERSION = "0.1";
     public static final int MAX_EVENTS = 200_000;
     private static final double HIGH_RAIL_V = 1.5;
-    private static final Set<String> IGNORED = Set.of("npn", "pnp", "nmos", "pmos", Design.GENERIC_KIND);
+    private static final Set<String> IGNORED = Set.of("npn", "pnp", "nmos", "pmos", "diode", "led", "opamp",
+            Design.GENERIC_KIND);
 
     public record Transition(double timeS, String level) {
     }

@@ -20,7 +20,7 @@ annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
 | Kind | Tools |
 | --- | --- |
 | Read (18) | design.get_capabilities, project.list, project.get_summary, project.get_snapshot, schematic.list_components, schematic.get_component, schematic.list_nets, schematic.get_net, library.search_components, parts.list, design.get_violations, simulation.run, pcb.get_board, pcb.get_analysis, assembly.get_scene, assembly.check, project.get_history, project.preview_changes |
-| Edit (13) | project.create, project.apply_changes, schematic.place_component, schematic.move_component, schematic.connect_pins, schematic.set_properties, schematic.draw_wire, parts.define, pcb.sync_board, pcb.place_footprint, pcb.route, project.undo, project.redo |
+| Edit (14) | project.create, project.apply_changes, schematic.place_component, schematic.move_component, schematic.connect_pins, schematic.set_properties, schematic.draw_wire, schematic.place_net_label, parts.define, pcb.sync_board, pcb.place_footprint, pcb.route, project.undo, project.redo |
 | Destructive (2) | schematic.delete_component, project.delete |
 
 Tool input schemas are generated with the registrations and reject unknown
@@ -38,7 +38,10 @@ default 200), naming truncated nets in the warnings. Project-derived responses i
 Wires are drawing objects: `schematic.draw_wire` (and the `draw_wire` operation)
 draws a polyline from a pin or a free point on a net to a pin or a free point,
 connecting the end pins as a side effect, so connectivity is always the net's pin
-membership. `parts.define` creates or updates a project part (`project.` ID
+membership. `schematic.place_net_label` (and `place_net_label`) labels a pin or
+a free point with a net name; a pin labelled with an existing net's name joins
+that net, so labels connect pins without wires (`delete_net_label` is
+destructive and never disconnects pins). `parts.define` creates or updates a project part (`project.` ID
 prefix): `generic` parts are boxes ignored by simulation, while parts of a
 built-in kind must keep that kind's pin numbers and parameters and simulate like
 it. Redefining a placed part updates its instances in the same revision;

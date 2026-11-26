@@ -36,7 +36,7 @@ class ServerContractTest {
 
     @Test
     void feignClientAndControllerShareAWorkingRevisionedContract() {
-        assertThat(client.search("")).hasSize(25);
+        assertThat(client.search("")).hasSize(28);
         assertThat(client.search("74hc")).hasSize(6);
         assertThat(client.search("resistor")).hasSize(1);
         assertThat(client.projects(0, 100)).isNotNull();
@@ -57,7 +57,7 @@ class ServerContractTest {
                     assertThat(e.error().currentRevision()).isEqualTo(2);
                 });
         Document document = client.exportProject(id);
-        assertThat(document.json()).contains("\"schemaVersion\" : \"0.3\"");
+        assertThat(document.json()).contains("\"schemaVersion\" : \"0.4\"");
         assertThatThrownBy(() -> client.importProject(document))
                 .isInstanceOfSatisfying(ConnectorException.class, e -> assertThat(e.status()).isEqualTo(409));
         assertThat(client.capabilities()).anyMatch(c -> c.id().equals("simulation") && c.available());

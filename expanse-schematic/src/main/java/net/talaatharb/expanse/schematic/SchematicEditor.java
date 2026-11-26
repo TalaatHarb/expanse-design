@@ -12,6 +12,8 @@ import net.talaatharb.expanse.domain.Design;
 import net.talaatharb.expanse.domain.Design.Component;
 import net.talaatharb.expanse.domain.Design.Definition;
 import net.talaatharb.expanse.domain.Design.Net;
+import net.talaatharb.expanse.domain.Design.NetLabel;
+import net.talaatharb.expanse.domain.Design.Point;
 import net.talaatharb.expanse.domain.Design.Pin;
 import net.talaatharb.expanse.domain.Design.Position;
 import net.talaatharb.expanse.domain.Design.Project;
@@ -82,11 +84,75 @@ public final class SchematicEditor {
         nets.removeAll(merged);
         UUID id = merged.isEmpty() ? UUID.randomUUID() : merged.getFirst().id();
         nets.add(new Net(id, name, members.stream().sorted().toList(),
-                merged.stream().flatMap(n -> n.wires().stream()).toList()));
+                merged.stream().flatMap(n -> n.wires().stream()).toList(),
+                merged.stream().flatMap(n -> n.labels().stream()).toList()));
+        return project.edited(project.components(), nets, retarget(project, merged, id));
+    }
+
+    /**
+     * Places a label showing {@code name} on a pin ({@code pinId}) or at a point on an existing net ({@code netId}
+     * plus {@code at}). The labelled net takes the name; when another net already has that name the two merge, which
+     * is how labels connect pins without drawn wires. A labelled pin that is not yet connected forms a one-pin net.
+     */
+    public Project placeLabel(Project project, UUID labelId, String name, UUID pinId, UUID netId, Point at) {
+        Design.require((pinId == null) != (netId == null), "Label a pin, or a point on a net");
+        Design.require(netId == null || at != null, "A label on a net needs a point");
+        Net source;
+        List<UUID> sourcePins;
+        if (pinId != null) {
+            require(project.components().stream().anyMatch(c -> c.pins().stream().anyMatch(p -> p.id().equals(pinId))),
+                    "PIN_NOT_FOUND", "Pin not found: " + pinId);
+            source = project.nets().stream().filter(n -> n.pinIds().contains(pinId)).findFirst().orElse(null);
+            sourcePins = source == null ? List.of(pinId) : source.pinIds();
+        } else {
+            source = net(project, netId);
+            sourcePins = source.pinIds();
+        }
+        var label = new NetLabel(labelId, pinId, pinId == null ? at : null);
+        Net target = project.nets().stream().filter(n -> n.name().equals(name) && n != source).findFirst()
+                .orElse(null);
+        var merged = new ArrayList<Net>();
+        if (source != null) {
+            merged.add(source);
+        }
+        if (target != null) {
+            merged.addFirst(target);
+        }
+        var members = new LinkedHashSet<UUID>();
+        merged.forEach(n -> members.addAll(n.pinIds()));
+        members.addAll(sourcePins);
+        var labels = new ArrayList<>(merged.stream().flatMap(n -> n.labels().stream()).toList());
+        labels.add(label);
+        UUID id = merged.isEmpty() ? UUID.randomUUID() : merged.getFirst().id();
+        var nets = new ArrayList<>(project.nets());
+        nets.removeAll(merged);
+        nets.add(new Net(id, name, members.stream().sorted().toList(),
+                merged.stream().flatMap(n -> n.wires().stream()).toList(), labels));
+        return project.edited(project.components(), nets, retarget(project, merged, id));
+    }
+
+    /** Removes a label; a net left with a single pin and no labels is dissolved together with its traces. */
+    public Project deleteLabel(Project project, UUID labelId) {
+        Net owner = project.nets().stream().filter(n -> n.labels().stream().anyMatch(l -> l.id().equals(labelId)))
+                .findFirst().orElseThrow(() -> new DesignException("LABEL_NOT_FOUND", "Net label not found: " + labelId));
+        var labels = owner.labels().stream().filter(l -> !l.id().equals(labelId)).toList();
+        var nets = project.nets().stream().map(n -> n != owner ? n
+                : n.pinIds().size() < 2 && labels.isEmpty() ? null : n.withLabels(labels))
+                .filter(n -> n != null).toList();
+        return withNets(project, project.components(), nets, project.board().placements());
+    }
+
+    private static Net net(Project project, UUID netId) {
+        return project.nets().stream().filter(n -> n.id().equals(netId)).findFirst()
+                .orElseThrow(() -> new DesignException("NET_NOT_FOUND", "Net not found: " + netId));
+    }
+
+    /** Points traces of {@code merged} nets at the surviving net {@code id}. */
+    private static Design.Board retarget(Project project, List<Net> merged, UUID id) {
         Set<UUID> mergedIds = new HashSet<>(merged.stream().map(Net::id).toList());
         var traces = project.board().traces().stream().map(t -> mergedIds.contains(t.netId())
                 ? new Trace(t.id(), id, t.layer(), t.widthMm(), t.points()) : t).toList();
-        return project.edited(project.components(), nets, project.board().with(project.board().placements(), traces));
+        return project.board().with(project.board().placements(), traces);
     }
 
     public Project disconnect(Project project, UUID pinId) {
@@ -98,7 +164,8 @@ public final class SchematicEditor {
 
     public Project renameNet(Project project, UUID netId, String name) {
         require(project.nets().stream().anyMatch(n -> n.id().equals(netId)), "NET_NOT_FOUND", "Net not found: " + netId);
-        var nets = project.nets().stream().map(n -> n.id().equals(netId) ? new Net(n.id(), name, n.pinIds(), n.wires()) : n).toList();
+        var nets = project.nets().stream().map(n -> n.id().equals(netId)
+                ? new Net(n.id(), name, n.pinIds(), n.wires(), n.labels()) : n).toList();
         return project.edited(project.components(), nets, project.board());
     }
 
@@ -179,8 +246,11 @@ public final class SchematicEditor {
             if (remaining.size() == n.pinIds().size()) {
                 return n;
             }
-            return remaining.size() < 2 ? null : new Net(n.id(), n.name(), remaining, n.wires().stream()
-                    .filter(w -> removedPins.stream().noneMatch(w::touches)).toList());
+            var labels = n.labels().stream().filter(l -> l.pinId() == null || !removedPins.contains(l.pinId()))
+                    .toList();
+            boolean kept = remaining.size() >= 2 || (remaining.size() == 1 && !labels.isEmpty());
+            return kept ? new Net(n.id(), n.name(), remaining, n.wires().stream()
+                    .filter(w -> removedPins.stream().noneMatch(w::touches)).toList(), labels) : null;
         }).filter(n -> n != null).toList();
     }
 

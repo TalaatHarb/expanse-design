@@ -83,19 +83,34 @@ without changing that user-authored plan.
   `settings.properties` below CLI/env precedence, with in-place reconnect and
   rollback, and a settings prompt instead of a failed launch.
 
+## R0f: implemented editing UX, more parts and GUI journeys (schema 0.4)
+
+- [x] Diode, LED and op-amp parts in the library, simulator (Shockley diode/LED,
+  tanh-limited open-loop op-amp to its rails), validation, symbols,
+  footprints and 3D bodies.
+- [x] Schema 0.4 net labels: `place_net_label`/`delete_net_label` operations
+  (22 operation types), MCP `schematic.place_net_label` (34 tools), 0.3
+  migration; desktop Label tool, label flags, rename/delete.
+- [x] Desktop multi-select (box, Shift/Ctrl-click, Select all), group
+  move/rotate/delete, cut/copy/paste/duplicate keeping internal nets, labels and
+  wires with renumbered references; Space/middle-drag pan.
+- [x] Automated TestFX/Monocle GUI journeys against the real local server:
+  build/simulate/save/reopen, undo/redo, net labels, group editing.
+
 ## R0b: complete the foundation release gate
 
-1. Add automated JavaFX user journeys (create/place/wire/simulate/route/save/
-   reopen) on Windows and Linux; manually validate accessibility and rendering.
+1. Extend the GUI journeys to PCB routing and 3D (schematic journeys exist) and
+   manually validate accessibility and rendering.
 2. Exercise an independent production MCP client on each supported OS. The
    existing wire-level protocol peer is a contract test, not that acceptance gate.
-3. Add multi-select, copy/paste, net labels and graphical symbol/footprint
-   drawing (wires, undo/redo and form-based part editing exist).
+3. Add graphical symbol/footprint drawing and hierarchical labels (wires,
+   net labels, multi-select, copy/paste, undo/redo and form-based part editing
+   exist).
 4. Add autosave/recovery UX, asset manifests, general extension JSON, and
    explicit import compatibility reports.
 5. Bind MCP approvals to specific previews, persist change events, and add
    per-user identities and richer audit records.
-6. Add library authoring, more parts (diodes, ICs) and explicit library
+6. Add library authoring, more parts (Zeners, regulators, ICs) and explicit library
    migration previews.
 7. Introduce server-side component/net pagination and caching keyed to revision
    once project sizes warrant it.
@@ -111,10 +126,10 @@ verified on both first-class platforms.
 | Plan IDs | Current executable coverage | Remaining gap |
 | --- | --- | --- |
 | ARC-001 | Headless domain/application tests; client dependency bans | Broader architecture rules as modules grow |
-| PRJ-001/002 | JSON round-trip, 0.1→0.2→0.3 migration, undo/redo history, H2 reopen, future-schema rejection, desktop session open/save/conflict tests | GUI reopen acceptance |
+| PRJ-001/002 | JSON round-trip, 0.1→0.4 migration, undo/redo history, H2 reopen, future-schema rejection, desktop session open/save/conflict tests, GUI save/reopen journey | Remote-mode GUI journey |
 | PRJ-003 / XPL-002 | Atomic file save, retained backup, Unicode/spaced paths, dirty tracking | Interrupted-save fault injection, recovery UX |
-| SCH-001/002/004 | Change-set placement/move/wire/delete, validation purity | Automated GUI journey |
-| SCH-003 | Co-located components never infer connectivity; wires drawn/merged/cleaned up with nets, schema 0.2→0.3 migration | Automated GUI journey |
+| SCH-001/002/004 | Change-set placement/move/wire/delete, validation purity, GUI journeys for place/wire/group move/copy/paste/delete/undo | Accessibility review |
+| SCH-003 | Co-located components never infer connectivity; wires and net labels drawn/merged/cleaned up with nets, 0.2→0.3→0.4 migration, GUI net-label journey | Hierarchical labels |
 | LIB-002 | Exact definition snapshot/version round-trip | Library update/migration workflow |
 | VAL-001/002 | Structured stable findings per part kind; unchanged revisions | More electrical rules |
 | SIM (R1) | Reference circuits: dividers, RC/RL transients, switch events, BJT/MOS operating points | Engine evaluation vs ngspice/Xyce, cancellation |

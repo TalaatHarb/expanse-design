@@ -46,6 +46,13 @@ import org.springframework.core.env.StandardEnvironment;
  */
 public final class WorkbenchApplication extends Application implements Workbench {
     private static final int PAGE = 50;
+
+    /** Replaces the native file chooser, which UI tests cannot drive; {@code save} tells save from open. */
+    interface FileDialog {
+        File choose(boolean save);
+    }
+
+    static volatile FileDialog fileDialog;
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "workbench-requests");
         thread.setDaemon(true);
@@ -74,6 +81,7 @@ public final class WorkbenchApplication extends Application implements Workbench
     private boolean dirty;
     private UUID selected;
     private int pending;
+    private javafx.scene.Node focusBeforeBusy;
 
     /** Session state captured on the worker thread and published to the FX thread. */
     private record State(Snapshot snapshot, Path file, boolean dirty, List<Diagnostic> diagnostics,
@@ -144,6 +152,7 @@ public final class WorkbenchApplication extends Application implements Workbench
             pcb.setActive(now.intValue() == 2);
             assembly.setActive(now.intValue() == 3);
         });
+        status.setId("workbench-status");
         busy.setPrefSize(16, 16);
         busy.setVisible(false);
         var spacer = new Region();
@@ -354,7 +363,14 @@ public final class WorkbenchApplication extends Application implements Workbench
         var file = new Menu("File", null, newProject, open, openServer, new SeparatorMenuItem(), save, saveAs,
                 new SeparatorMenuItem(), reload, close, new SeparatorMenuItem(), settings, new SeparatorMenuItem(), exit);
 
-        var edit = new Menu("Edit", null, undoItem, redoItem);
+        var cut = item("Cut", "Shortcut+X", () -> clipboard(TextInputControl::cut, schematic::cut));
+        var copy = item("Copy", "Shortcut+C", () -> clipboard(TextInputControl::copy, schematic::copy));
+        var paste = item("Paste", "Shortcut+V", () -> clipboard(TextInputControl::paste, schematic::paste));
+        var duplicate = item("Duplicate", "Shortcut+D", () -> clipboard(null, schematic::duplicate));
+        var selectAll = item("Select all", "Shortcut+A", () -> clipboard(TextInputControl::selectAll,
+                schematic::selectAll));
+        var edit = new Menu("Edit", null, undoItem, redoItem, new SeparatorMenuItem(), cut, copy, paste, duplicate,
+                new SeparatorMenuItem(), selectAll);
 
         var rename = item("Rename project...", null, this::renameProject);
         var validate = item("Validate", "F7", () -> {
@@ -374,6 +390,36 @@ public final class WorkbenchApplication extends Application implements Workbench
 
         var about = item("About and MCP setup", null, this::about);
         return new MenuBar(file, edit, design, new Menu("Help", null, about));
+    }
+
+    /**
+     * Edit-menu clipboard commands act on a focused text field (so its own shortcuts keep working) and otherwise on
+     * the schematic selection.
+     */
+    private void clipboard(Consumer<TextInputControl> text, Runnable schematicAction) {
+        if (stage.getScene().getFocusOwner() instanceof TextInputControl field) {
+            if (text != null) {
+                text.accept(field);
+            }
+            return;
+        }
+        if (current == null) {
+            return;
+        }
+        if (tabs.getSelectionModel().getSelectedIndex() != 0) {
+            status("Copy and paste work on the schematic tab");
+            return;
+        }
+        schematicAction.run();
+    }
+
+    /** True when no server request is queued or running; UI tests wait for this before asserting. */
+    boolean idle() {
+        return pending == 0;
+    }
+
+    SchematicPane schematicView() {
+        return schematic;
     }
 
     private static MenuItem item(String text, String accelerator, Runnable action) {
@@ -429,7 +475,9 @@ public final class WorkbenchApplication extends Application implements Workbench
                 return call.call();
             }
         };
-        pending++;
+        if (pending++ == 0 && stage.getScene() != null) {
+            focusBeforeBusy = stage.getScene().getFocusOwner();
+        }
         tabs.setDisable(true);
         busy.setVisible(true);
         task.setOnSucceeded(e -> {
@@ -447,6 +495,14 @@ public final class WorkbenchApplication extends Application implements Workbench
         pending--;
         tabs.setDisable(pending > 0);
         busy.setVisible(pending > 0);
+        // Disabling the tabs moves focus away; give it back so canvas shortcuts keep working after an edit.
+        javafx.scene.Node focus = focusBeforeBusy;
+        if (pending == 0 && focus != null) {
+            focusBeforeBusy = null;
+            if (focus.getScene() == stage.getScene() && !focus.isDisabled() && focus.isVisible()) {
+                focus.requestFocus();
+            }
+        }
     }
 
     private void runState(Callable<State> call) {
@@ -617,7 +673,7 @@ public final class WorkbenchApplication extends Application implements Workbench
         if (!confirmDiscard("opening another project")) {
             return;
         }
-        File file = projectChooser().showOpenDialog(stage);
+        File file = fileDialog != null ? fileDialog.choose(false) : projectChooser().showOpenDialog(stage);
         if (file != null) {
             openFile(file.toPath(), false);
         }
@@ -761,7 +817,7 @@ public final class WorkbenchApplication extends Application implements Workbench
         var chooser = projectChooser();
         chooser.setInitialFileName((currentFile != null ? currentFile.getFileName().toString()
                 : current.name().replaceAll("[^A-Za-z0-9._ -]", "_") + ".json"));
-        File file = chooser.showSaveDialog(stage);
+        File file = fileDialog != null ? fileDialog.choose(true) : chooser.showSaveDialog(stage);
         if (file == null) {
             return null;
         }
