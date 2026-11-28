@@ -25,7 +25,11 @@ import javafx.scene.text.Font;
 import javafx.scene.text.TextAlignment;
 import net.talaatharb.expanse.dto.ApiModels.*;
 
-/** PCB layout: board outline, footprints, pads, traces, ratsnest and design-rule findings. Y points up. */
+/**
+ * PCB layout: board outline, footprints, pads, traces, vias, copper zones, ratsnest and design-rule findings. Y points
+ * up. Tools: route (pad to pad), via (click to drop a via on the chosen net) and zone (click the outline corners,
+ * double-click or Enter to finish).
+ */
 final class PcbPane {
     private static final double GRID = 1.27;
     private final Workbench workbench;
@@ -54,6 +58,14 @@ final class PcbPane {
     private boolean moved;
     private boolean panning;
     private Set<UUID> highlighted = Set.of();
+    private final ComboBox<String> net = new ComboBox<>();
+    private final ToggleGroup tools = new ToggleGroup();
+    private final ToggleButton routeTool = new ToggleButton("Route");
+    private final ToggleButton viaTool = new ToggleButton("Via");
+    private final ToggleButton zoneTool = new ToggleButton("Zone");
+    private final List<PointView> zoneDraft = new java.util.ArrayList<>();
+    private UUID selectedVia;
+    private UUID selectedZone;
 
     PcbPane(Workbench workbench) {
         this.workbench = workbench;
@@ -70,7 +82,9 @@ final class PcbPane {
         var deleteTrace = new Button("Delete trace");
         deleteTrace.setOnAction(e -> deleteSelectedTrace());
         var deleteAllTraces = new Button("Delete all traces");
-        deleteAllTraces.setTooltip(new Tooltip("Remove every routed trace in one revision; placements are kept"));
+        deleteAllTraces.setId("pcb-delete-all-traces");
+        deleteAllTraces.setTooltip(new Tooltip("Remove every routed trace and via in one revision; placements and "
+                + "zones are kept"));
         deleteAllTraces.setOnAction(e -> deleteAllTraces());
         var rotate = new Button("Rotate part");
         rotate.setOnAction(e -> rotateSelected());
@@ -79,8 +93,39 @@ final class PcbPane {
             fit();
             redraw();
         });
-        var toolbar = new HBox(6, sync, routeAll, board, new Separator(Orientation.VERTICAL), new Label("Layer"), layer,
-                new Label("Width (mm)"), width, deleteTrace, deleteAllTraces, rotate, fit);
+        var autoroute = new Button("Autoroute");
+        autoroute.setId("pcb-autoroute");
+        autoroute.setTooltip(new Tooltip("Route every unrouted connection on both layers with vias, keeping the "
+                + "board clearance"));
+        autoroute.setOnAction(e -> autoroute());
+        var pour = new Button("Pour board");
+        pour.setId("pcb-pour");
+        pour.setTooltip(new Tooltip("Add a copper zone covering the whole board on the chosen net and layer"));
+        pour.setOnAction(e -> pourBoard());
+        routeTool.setToggleGroup(tools);
+        viaTool.setToggleGroup(tools);
+        zoneTool.setToggleGroup(tools);
+        routeTool.setSelected(true);
+        routeTool.setTooltip(new Tooltip("Click a pad, then another pad on the same net"));
+        viaTool.setTooltip(new Tooltip("Click to place a via on the chosen net"));
+        zoneTool.setTooltip(new Tooltip("Click the zone corners; double-click or Enter finishes, Esc cancels"));
+        tools.selectedToggleProperty().addListener((o, old, now) -> {
+            if (now == null) {
+                old.setSelected(true);
+                return;
+            }
+            routeStart = null;
+            zoneDraft.clear();
+            redraw();
+        });
+        net.setId("pcb-net");
+        net.setPromptText("Net");
+        net.setPrefWidth(110);
+        net.setTooltip(new Tooltip("Net for new vias and zones"));
+        var toolbar = new javafx.scene.layout.FlowPane(6, 4, sync, autoroute, routeAll, board,
+                new Separator(Orientation.VERTICAL), routeTool, viaTool, zoneTool, new Label("Net"), net, pour,
+                new Separator(Orientation.VERTICAL), new Label("Layer"), layer, new Label("Width (mm)"), width,
+                deleteTrace, deleteAllTraces, rotate, fit);
         toolbar.setPadding(new Insets(4));
 
         var holder = new Pane(canvas);
@@ -96,7 +141,7 @@ final class PcbPane {
         canvas.setOnMouseMoved(e -> {
             mouseX = e.getX();
             mouseY = e.getY();
-            if (routeStart != null) {
+            if (routeStart != null || !zoneDraft.isEmpty()) {
                 redraw();
             }
         });
@@ -105,9 +150,13 @@ final class PcbPane {
             switch (e.getCode()) {
                 case DELETE, BACK_SPACE -> deleteSelectedTrace();
                 case R -> rotateSelected();
+                case ENTER -> finishZone();
                 case ESCAPE -> {
                     routeStart = null;
                     selectedTrace = null;
+                    selectedVia = null;
+                    selectedZone = null;
+                    zoneDraft.clear();
                     redraw();
                 }
                 default -> {
@@ -163,6 +212,13 @@ final class PcbPane {
                 fittedProject = snapshot.id();
                 fit();
             }
+            String chosen = net.getValue();
+            var names = snapshot.nets().stream().map(NetView::name).sorted().toList();
+            if (!names.equals(net.getItems())) {
+                net.getItems().setAll(names);
+            }
+            net.setValue(names.contains(chosen) ? chosen
+                    : names.contains("GND") ? "GND" : names.isEmpty() ? null : names.getFirst());
             if (routeStart != null && snapshot.board().pads().stream()
                     .noneMatch(p -> p.pinId().equals(routeStart.pinId()))) {
                 routeStart = null;
@@ -190,7 +246,8 @@ final class PcbPane {
                 findings.getItems().setAll(result.findings());
                 long errors = result.findings().stream().filter(f -> f.severity().equals("ERROR")).count();
                 summary.setText(project.board().placements().size() + " footprints, " + project.board().traces().size()
-                        + " traces, " + result.airwires().size() + " unrouted connection(s), " + errors + " error(s)");
+                        + " traces, " + project.board().vias().size() + " vias, " + project.board().zones().size()
+                        + " zones, " + result.airwires().size() + " unrouted connection(s), " + errors + " error(s)");
                 redraw();
             }
         });
@@ -305,6 +362,23 @@ final class PcbPane {
             panning = true;
             return;
         }
+        if (viaTool.isSelected()) {
+            if (requireNet()) {
+                workbench.apply(List.of(new AddViaOp(net.getValue(), snap(mmX(e.getX())), snap(mmY(e.getY())), null,
+                        null)));
+            }
+            return;
+        }
+        if (zoneTool.isSelected()) {
+            if (e.getClickCount() >= 2) {
+                finishZone();
+            } else {
+                zoneDraft.add(new PointView(snap(mmX(e.getX())), snap(mmY(e.getY()))));
+                workbench.status("Zone: " + zoneDraft.size() + " corner(s); double-click or Enter to finish");
+                redraw();
+            }
+            return;
+        }
         PadView pad = padAt(e.getX(), e.getY());
         if (pad != null) {
             if (routeStart == null) {
@@ -325,16 +399,20 @@ final class PcbPane {
             return;
         }
         routeStart = null;
-        TraceView trace = traceAt(e.getX(), e.getY());
+        ViaView via = viaAt(e.getX(), e.getY());
+        TraceView trace = via == null ? traceAt(e.getX(), e.getY()) : null;
         PlacementView placement = placementAt(e.getX(), e.getY());
+        selectedVia = placement == null ? via == null ? null : via.id() : null;
         selectedTrace = placement == null && trace != null ? trace.id() : null;
+        ZoneView zone = placement == null && via == null && trace == null ? zoneAt(e.getX(), e.getY()) : null;
+        selectedZone = zone == null ? null : zone.id();
         if (placement != null) {
             workbench.select(placement.componentId());
             dragging = placement;
             dragDx = mmX(e.getX()) - placement.xMm();
             dragDy = mmY(e.getY()) - placement.yMm();
         } else {
-            if (trace == null) {
+            if (trace == null && via == null) {
                 workbench.select(null);
             }
             panning = true;
@@ -411,28 +489,114 @@ final class PcbPane {
             UUID trace = selectedTrace;
             selectedTrace = null;
             workbench.apply(List.of(new DeleteTraceOp(trace)));
+        } else if (selectedVia != null) {
+            UUID via = selectedVia;
+            selectedVia = null;
+            workbench.apply(List.of(new DeleteViaOp(via)));
+        } else if (selectedZone != null) {
+            UUID zone = selectedZone;
+            selectedZone = null;
+            workbench.apply(List.of(new DeleteZoneOp(zone)));
         }
     }
 
+    private boolean requireNet() {
+        if (net.getValue() == null) {
+            workbench.error("Choose a net for the via or zone first (connect some pins in the schematic).");
+            return false;
+        }
+        return true;
+    }
+
+    private void finishZone() {
+        if (zoneDraft.size() < 3) {
+            if (zoneTool.isSelected()) {
+                workbench.status("A zone needs at least three corners");
+            }
+            return;
+        }
+        var outline = List.copyOf(zoneDraft);
+        zoneDraft.clear();
+        if (requireNet()) {
+            workbench.apply(List.of(new AddZoneOp(net.getValue(), layer.getValue(), outline, null)));
+        }
+        redraw();
+    }
+
+    private void pourBoard() {
+        if (project == null || !requireNet()) {
+            return;
+        }
+        double inset = Math.max(0.5, project.board().clearanceMm());
+        double w = project.board().widthMm() - inset;
+        double h = project.board().heightMm() - inset;
+        workbench.apply(List.of(new AddZoneOp(net.getValue(), layer.getValue(), List.of(new PointView(inset, inset),
+                new PointView(w, inset), new PointView(w, h), new PointView(inset, h)), null)));
+    }
+
+    private void autoroute() {
+        Double traceWidth = traceWidth();
+        if (traceWidth != null && project != null) {
+            workbench.apply(List.of(new AutorouteOp(null, traceWidth, null, null)));
+        }
+    }
+
+    private ViaView viaAt(double x, double y) {
+        if (project == null) {
+            return null;
+        }
+        return project.board().vias().stream().filter(v -> Math.hypot(mmX(x) - v.xMm(), mmY(y) - v.yMm())
+                <= v.diameterMm() / 2 + 2 / scale).findFirst().orElse(null);
+    }
+
+    private ZoneView zoneAt(double x, double y) {
+        if (project == null) {
+            return null;
+        }
+        double px = mmX(x);
+        double py = mmY(y);
+        var zones = project.board().zones();
+        for (int z = zones.size() - 1; z >= 0; z--) {
+            var outline = zones.get(z).outline();
+            boolean inside = false;
+            for (int i = 0, j = outline.size() - 1; i < outline.size(); j = i++) {
+                var a = outline.get(i);
+                var b = outline.get(j);
+                if ((a.yMm() > py) != (b.yMm() > py)
+                        && px < (b.xMm() - a.xMm()) * (py - a.yMm()) / (b.yMm() - a.yMm()) + a.xMm()) {
+                    inside = !inside;
+                }
+            }
+            if (inside) {
+                return zones.get(z);
+            }
+        }
+        return null;
+    }
+
     private void deleteAllTraces() {
-        if (project == null || project.board().traces().isEmpty()) {
+        if (project == null || project.board().traces().isEmpty() && project.board().vias().isEmpty()) {
             workbench.status("No traces to delete");
             return;
         }
         int count = project.board().traces().size();
-        var confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete all " + count
-                + " trace(s)? Footprint placements are kept.", ButtonType.YES, ButtonType.NO);
+        int vias = project.board().vias().size();
+        var confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete all " + count + " trace(s)"
+                + (vias == 0 ? "" : " and " + vias + " via(s)") + "? Footprint placements and zones are kept.",
+                ButtonType.YES, ButtonType.NO);
         confirm.initOwner(canvas.getScene().getWindow());
         if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) {
             return;
         }
         selectedTrace = null;
+        selectedVia = null;
         workbench.apply(deleteAllTracesOperations(project.board()));
-        workbench.status("Deleted " + count + " trace(s)");
+        workbench.status("Deleted " + count + " trace(s)" + (vias == 0 ? "" : " and " + vias + " via(s)"));
     }
 
     static List<Operation> deleteAllTracesOperations(BoardView board) {
-        return board.traces().stream().map(t -> (Operation) new DeleteTraceOp(t.id())).toList();
+        return java.util.stream.Stream.concat(board.traces().stream().map(t -> (Operation) new DeleteTraceOp(t.id())),
+                board.vias().stream().map(v -> (Operation) new DeleteViaOp(v.id()))).toList();
     }
 
     private void rotateSelected() {
@@ -478,6 +642,18 @@ final class PcbPane {
 
     // ---- Rendering ----
 
+    private void polygon(GraphicsContext g, List<PointView> points, boolean closed) {
+        int n = points.size();
+        for (int i = 0; i + 1 < n || closed && i < n && n > 2; i++) {
+            var a = points.get(i);
+            var b = points.get((i + 1) % n);
+            g.strokeLine(sx(a.xMm()), sy(a.yMm()), sx(b.xMm()), sy(b.yMm()));
+            if (i + 1 == n) {
+                break;
+            }
+        }
+    }
+
     void redraw() {
         GraphicsContext g = canvas.getGraphicsContext2D();
         g.setFill(Color.web("#1e2124"));
@@ -493,6 +669,24 @@ final class PcbPane {
         g.setStroke(Color.web("#e0c341"));
         g.setLineWidth(1.5);
         g.strokeRect(sx(0), sy(board.heightMm()), board.widthMm() * scale, board.heightMm() * scale);
+        for (String side : List.of("bottom", "top")) {
+            Color copper = side.equals("top") ? Color.web("#d64541") : Color.web("#3b78e7");
+            for (ZoneView zone : board.zones()) {
+                if (!zone.layer().equals(side)) {
+                    continue;
+                }
+                boolean selectedZoneNow = zone.id().equals(selectedZone) || highlighted.contains(zone.id());
+                g.setFill(copper.deriveColor(0, 1, 1, selectedZoneNow ? 0.55 : 0.35));
+                for (RectView r : zone.fill()) {
+                    g.fillRect(sx(r.xMm()), sy(r.yMm() + r.heightMm()), r.widthMm() * scale, r.heightMm() * scale);
+                }
+                g.setStroke(selectedZoneNow ? Color.WHITE : copper);
+                g.setLineWidth(1);
+                g.setLineDashes(6, 3);
+                polygon(g, zone.outline(), true);
+                g.setLineDashes();
+            }
+        }
         g.setLineCap(StrokeLineCap.ROUND);
         for (String side : List.of("bottom", "top")) {
             for (TraceView trace : board.traces()) {
@@ -546,6 +740,24 @@ final class PcbPane {
                 g.fillOval(sx(x) - r, sy(y) - r, 2 * r, 2 * r);
             }
         }
+        for (ViaView via : board.vias()) {
+            double r = via.diameterMm() / 2 * scale;
+            double hole = via.drillMm() / 2 * scale;
+            boolean isSelected = via.id().equals(selectedVia) || highlighted.contains(via.id());
+            g.setFill(isSelected ? Color.WHITE : Color.web("#c8a43c"));
+            g.fillOval(sx(via.xMm()) - r, sy(via.yMm()) - r, 2 * r, 2 * r);
+            g.setFill(Color.web("#1e2124"));
+            g.fillOval(sx(via.xMm()) - hole, sy(via.yMm()) - hole, 2 * hole, 2 * hole);
+        }
+        if (!zoneDraft.isEmpty()) {
+            var draft = new java.util.ArrayList<>(zoneDraft);
+            draft.add(new PointView(snap(mmX(mouseX)), snap(mmY(mouseY))));
+            g.setStroke(Color.WHITE);
+            g.setLineWidth(1.5);
+            g.setLineDashes(6, 4);
+            polygon(g, draft, true);
+            g.setLineDashes();
+        }
         if (analysis != null && analysis.revision() == project.revision()) {
             g.setStroke(Color.web("#fff59d"));
             g.setLineWidth(1);
@@ -566,7 +778,8 @@ final class PcbPane {
         g.setTextBaseline(VPos.BASELINE);
         g.setFill(Color.LIGHTGRAY);
         g.fillText(String.format(java.util.Locale.ROOT, "Board %.1f \u00d7 %.1f mm \u2022 click pad\u2192pad to route "
-                        + "\u2022 drag parts \u2022 R rotate \u2022 Del deletes selected trace", board.widthMm(),
+                        + "\u2022 drag parts \u2022 R rotate \u2022 Del deletes the selected trace, via or zone",
+                board.widthMm(),
                 board.heightMm()), 10, canvas.getHeight() - 10);
     }
 }

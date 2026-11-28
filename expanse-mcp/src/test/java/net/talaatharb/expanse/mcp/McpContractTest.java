@@ -31,7 +31,7 @@ class McpContractTest {
         var api = mock(WorkbenchApi.class);
         UUID id = UUID.fromString("00000000-0000-0000-0000-000000000001");
         when(api.project(id)).thenReturn(new Snapshot(id, "MCP circuit", 7, List.of(), List.of(), List.of(),
-                new BoardView(100, 80, 1.6, 0.2, List.of(), List.of(), List.of()), List.of()));
+                new BoardView(100, 80, 1.6, 0.2, List.of(), List.of(), List.of(), List.of(), List.of()), List.of()));
         try (var serverInput = new PipedInputStream(65536);
              var clientWrite = new PipedOutputStream(serverInput);
              var clientInput = new PipedInputStream(65536);
@@ -53,7 +53,7 @@ class McpContractTest {
                         """);
                 JsonNode discovered = mapper.readTree(reads.submit(reader::readLine).get(10, TimeUnit.SECONDS));
                 JsonNode tools = discovered.path("result").path("tools");
-                assertThat(tools.size()).isEqualTo(18);
+                assertThat(tools.size()).isEqualTo(20);
                 for (JsonNode tool : tools) {
                     assertThat(tool.path("name").asText()).doesNotContain("place", "apply", "connect", "delete", "create");
                     assertThat(tool.path("annotations").path("readOnlyHint").asBoolean()).as(tool.toString()).isTrue();
@@ -128,6 +128,14 @@ class McpContractTest {
                         "required", true)))));
         verify(api).applyChanges(id, new ChangeSet(6, List.of(new DefinePartOp(new PartSpec("sensor", null, "Sensor",
                 null, List.of(new PinSpec("1", "OUT", true)), null, null, null, 0, 0, null)))));
+        call(mapper, tools, "pcb.add_zone", Map.of("projectId", id.toString(), "expectedRevision", 7, "net", "GND",
+                "outline", List.of(Map.of("xMm", 0, "yMm", 0), Map.of("xMm", 10, "yMm", 0),
+                        Map.of("xMm", 10, "yMm", 10))));
+        verify(api).applyChanges(id, new ChangeSet(7, List.of(new AddZoneOp("GND", null,
+                List.of(new PointView(0, 0), new PointView(10, 0), new PointView(10, 10)), null))));
+        call(mapper, tools, "pcb.autoroute", Map.of("projectId", id.toString(), "expectedRevision", 8,
+                "nets", List.of("GND"), "widthMm", 0.3));
+        verify(api).applyChanges(id, new ChangeSet(8, List.of(new AutorouteOp(List.of("GND"), 0.3, null, null))));
         verifyNoMoreInteractions(api);
 
         var full = byName(new WorkbenchTools(api, mapper, McpPolicy.full()).specifications());
@@ -141,7 +149,7 @@ class McpContractTest {
         var schema = WorkbenchTools.operationsSchema();
         @SuppressWarnings("unchecked")
         var variants = (List<Map<String, Object>>) ((Map<String, Object>) schema.get("items")).get("oneOf");
-        assertThat(variants).hasSize(22);
+        assertThat(variants).hasSize(27);
         var place = variants.stream().filter(v -> ((Map<?, ?>) v.get("properties")).get("op")
                 .equals(Map.of("const", "place_component"))).findFirst().orElseThrow();
         assertThat((List<Object>) place.get("required"))

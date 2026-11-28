@@ -16,10 +16,13 @@ import net.talaatharb.expanse.domain.Design.Point;
 import net.talaatharb.expanse.domain.Design.Project;
 import net.talaatharb.expanse.domain.Design.Sheet;
 import net.talaatharb.expanse.domain.Design.Trace;
+import net.talaatharb.expanse.domain.Design.Via;
+import net.talaatharb.expanse.domain.Design.Zone;
 import net.talaatharb.expanse.domain.Design.Wire;
 import net.talaatharb.expanse.dto.ApiModels.*;
 import net.talaatharb.expanse.pcb.BoardAnalyzer;
 import net.talaatharb.expanse.pcb.PcbGeometry;
+import net.talaatharb.expanse.pcb.ZoneFiller;
 import net.talaatharb.expanse.validation.DesignValidator;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
@@ -45,6 +48,10 @@ public interface DesignViewMapper {
     NetLabelView label(NetLabel label);
 
     TraceView trace(Trace trace);
+
+    ViaView via(Via via);
+
+    RectView rect(ZoneFiller.FillRect rect);
 
     PadView pad(PcbGeometry.PlacedPad pad);
 
@@ -117,8 +124,16 @@ public interface DesignViewMapper {
                 project.nets().size());
     }
 
+    default ZoneView zone(Zone zone, List<ZoneFiller.ZoneFill> fills) {
+        var fill = fills.stream().filter(f -> f.zoneId().equals(zone.id())).findFirst()
+                .map(f -> f.rects().stream().map(this::rect).toList()).orElse(List.of());
+        return new ZoneView(zone.id(), zone.netId(), zone.layer(), zone.outline().stream().map(this::point).toList(),
+                zone.clearanceMm(), fill);
+    }
+
     default Snapshot snapshot(Project project) {
         var board = project.board();
+        var fills = new ZoneFiller().fill(project);
         return new Snapshot(project.id(), project.name(), project.revision(),
                 project.sheets().stream().map(this::sheet).toList(),
                 project.components().stream().map(this::component).toList(),
@@ -126,7 +141,9 @@ public interface DesignViewMapper {
                 new BoardView(board.widthMm(), board.heightMm(), board.thicknessMm(), board.clearanceMm(),
                         board.placements().stream().map(p -> placement(project, p)).toList(),
                         board.traces().stream().map(this::trace).toList(),
-                        PcbGeometry.pads(project).stream().map(this::pad).toList()),
+                        PcbGeometry.pads(project).stream().map(this::pad).toList(),
+                        board.vias().stream().map(this::via).toList(),
+                        board.zones().stream().map(z -> zone(z, fills)).toList()),
                 project.parts().stream().map(this::part).toList());
     }
 }

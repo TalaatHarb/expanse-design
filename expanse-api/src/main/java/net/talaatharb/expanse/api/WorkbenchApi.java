@@ -61,6 +61,15 @@ public interface WorkbenchApi {
     @GetMapping("/api/v1/projects/{id}/assembly")
     AssemblyView assembly(@PathVariable("id") UUID id);
 
+    @GetMapping("/api/v1/projects/{id}/fabrication")
+    FabricationView fabrication(@PathVariable("id") UUID id);
+
+    @GetMapping("/api/v1/projects/{id}/spice")
+    SpiceView exportSpice(@PathVariable("id") UUID id);
+
+    @PostMapping("/api/v1/projects/import-spice")
+    SpiceImportResult importSpice(@Valid @RequestBody SpiceImport request);
+
     @PutMapping("/api/v1/projects/{id}/document")
     Snapshot replaceDocument(@PathVariable("id") UUID id, @Valid @RequestBody ReplaceDocument request);
 

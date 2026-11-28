@@ -97,6 +97,25 @@ without changing that user-authored plan.
 - [x] Automated TestFX/Monocle GUI journeys against the real local server:
   build/simulate/save/reopen, undo/redo, net labels, group editing.
 
+## R0g: implemented copper, autorouting, fabrication and SPICE (schema 0.5)
+
+- [x] Schema 0.5 vias and copper zones on the board (0.4 migration adds empty
+  lists); zones are filled on demand around foreign copper with clearance, and
+  vias join both layers for connectivity and DRC.
+- [x] Grid A* autorouter (45° moves, turn and via costs) on both layers
+  honouring board clearance; reports unrouted connections.
+- [x] Fabrication export: Gerber RS-274X copper/mask/silkscreen/outline, Excellon
+  drill, BOM and pick-and-place CSV, with DRC findings.
+- [x] SPICE netlist export (`.op` deck, device models, warnings for approximated
+  parts) and import (R/C/L/V/D/Q/M) into a new laid-out project.
+- [x] Operations `add_via`, `delete_via`, `add_zone`, `delete_zone`,
+  `autoroute` (27 operation types); REST `fabrication`, `spice`, `import-spice`;
+  MCP `pcb.add_via`, `pcb.add_zone`, `pcb.autoroute`, `pcb.export_fabrication`,
+  `simulation.export_spice`, `project.import_spice` (40 tools).
+- [x] Desktop PCB tools (Autoroute, Via, Zone, Pour board, net picker, via/zone
+  rendering and deletion), File menu SPICE import/export and fabrication export;
+  GUI journey covering layout, autoroute, pour, fabrication, SPICE and 3D.
+
 ## R0b: complete the foundation release gate
 
 1. Extend the GUI journeys to PCB routing and 3D (schematic journeys exist) and

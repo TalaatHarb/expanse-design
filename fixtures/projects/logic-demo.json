@@ -35,7 +35,9 @@
     } ],
     "thicknessMm" : 1.6,
     "traces" : [ ],
-    "widthMm" : 80.0
+    "vias" : [ ],
+    "widthMm" : 80.0,
+    "zones" : [ ]
   },
   "components" : [ {
     "definition" : {
@@ -1158,7 +1160,7 @@
   } ],
   "parts" : [ ],
   "revision" : 1,
-  "schemaVersion" : "0.4",
+  "schemaVersion" : "0.5",
   "sheets" : [ {
     "id" : "70341673-194c-4f82-86a6-a9c1fdf388c4",
     "name" : "Main"

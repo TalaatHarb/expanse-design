@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talaatharb.github.io/expanse-design/schemas/project/0.5.schema.json",
+  "title": "Expanse canonical project 0.5",
+  "description": "Schematic with typed parameters, embedded definition snapshots (pins, parameters, footprint, 3D body), wire graphics, net labels, project parts and a two-layer board. Units are millimetres; rotations are degrees counter-clockwise.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "name", "revision", "createdAt", "modifiedAt", "sheets", "components", "nets", "board", "parts", "extensions"],
+  "properties": {
+    "schemaVersion": {"const": "0.5"},
+    "id": {"$ref": "#/$defs/id"},
+    "name": {"$ref": "#/$defs/text"},
+    "revision": {"type": "integer", "minimum": 0},
+    "createdAt": {"type": "string", "format": "date-time"},
+    "modifiedAt": {"type": "string", "format": "date-time"},
+    "sheets": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sheet"}},
+    "components": {"type": "array", "maxItems": 5000, "items": {"$ref": "#/$defs/component"}},
+    "nets": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/net"}},
+    "board": {"$ref": "#/$defs/board"},
+    "parts": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/definition"}},
+    "extensions": {"type": "object", "additionalProperties": {"type": "string"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "format": "uuid"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S"},
+    "mm": {"type": "number"},
+    "positiveMm": {"type": "number", "exclusiveMinimum": 0},
+    "rotation": {"enum": [0, 90, 180, 270]},
+    "layer": {"enum": ["top", "bottom"]},
+    "sheet": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "name": {"$ref": "#/$defs/text"}}
+    },
+    "position": {
+      "type": "object", "additionalProperties": false, "required": ["x", "y", "unit"],
+      "properties": {"x": {"type": "number"}, "y": {"type": "number"}, "unit": {"const": "mm"}}
+    },
+    "pinDefinition": {
+      "type": "object", "additionalProperties": false, "required": ["number", "name", "required"],
+      "properties": {
+        "number": {"$ref": "#/$defs/text"}, "name": {"$ref": "#/$defs/text"}, "required": {"type": "boolean"}
+      }
+    },
+    "parameterDefinition": {
+      "type": "object", "additionalProperties": false, "required": ["name", "unit", "defaultValue", "allowedValues"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "unit": {"type": "string", "maxLength": 20},
+        "defaultValue": {"type": "string", "maxLength": 200},
+        "allowedValues": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/text"}}
+      }
+    },
+    "pad": {
+      "type": "object", "additionalProperties": false,
+      "required": ["number", "xMm", "yMm", "widthMm", "heightMm", "drillMm"],
+      "properties": {
+        "number": {"$ref": "#/$defs/text"}, "xMm": {"$ref": "#/$defs/mm"}, "yMm": {"$ref": "#/$defs/mm"},
+        "widthMm": {"$ref": "#/$defs/positiveMm"}, "heightMm": {"$ref": "#/$defs/positiveMm"},
+        "drillMm": {"type": "number", "minimum": 0}
+      }
+    },
+    "footprint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "pads", "courtyardWidthMm", "courtyardHeightMm"],
+      "properties": {
+        "name": {"$ref": "#/$defs/text"},
+        "pads": {"type": "array", "items": {"$ref": "#/$defs/pad"}},
+        "courtyardWidthMm": {"type": "number", "minimum": 0},
+        "courtyardHeightMm": {"type": "number", "minimum": 0}
+      }
+    },
+    "body": {
+      "type": "object", "additionalProperties": false,
+      "required": ["shape", "widthMm", "depthMm", "heightMm", "color"],
+      "properties": {
+        "shape": {"enum": ["box", "cylinder", "axial", "none"]},
+        "widthMm": {"type": "number", "minimum": 0}, "depthMm": {"type": "number", "minimum": 0},
+        "heightMm": {"type": "number", "minimum": 0},
+        "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"}
+      }
+    },
+    "definition": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "name", "kind", "pins", "parameters", "footprint", "body"],
+      "properties": {
+        "id": {"$ref": "#/$defs/text"}, "version": {"$ref": "#/$defs/text"}, "name": {"$ref": "#/$defs/text"},
+        "kind": {"enum": ["resistor", "capacitor", "inductor", "voltage-source", "power-rail", "ground", "switch", "npn", "pnp", "nmos", "pmos", "diode", "led", "opamp", "logic-input", "logic-clock", "logic-and", "logic-or", "logic-nand", "logic-nor", "logic-xor", "logic-not", "logic-74hc00", "logic-74hc04", "logic-74hc08", "logic-74hc32", "logic-74hc86", "logic-74hc74", "generic"]},
+        "pins": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pinDefinition"}},
+        "parameters": {"type": "array", "items": {"$ref": "#/$defs/parameterDefinition"}},
+        "footprint": {"$ref": "#/$defs/footprint"},
+        "body": {"$ref": "#/$defs/body"}
+      }
+    },
+    "pin": {
+      "type": "object", "additionalProperties": false, "required": ["id", "number"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "number": {"$ref": "#/$defs/text"}}
+    },
+    "component": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "sheetId", "reference", "definition", "position", "rotation", "properties", "pins"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "sheetId": {"$ref": "#/$defs/id"},
+        "reference": {"$ref": "#/$defs/text"}, "definition": {"$ref": "#/$defs/definition"},
+        "position": {"$ref": "#/$defs/position"},
+        "rotation": {"$ref": "#/$defs/rotation"},
+        "properties": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 200}},
+        "pins": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/pin"}}
+      }
+    },
+    "net": {
+      "type": "object", "additionalProperties": false, "required": ["id", "name", "pinIds", "wires", "labels"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "name": {"$ref": "#/$defs/text"},
+        "pinIds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "wires": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/wire"}},
+        "labels": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/netLabel"}}
+      }
+    },
+    "placement": {
+      "type": "object", "additionalProperties": false, "required": ["componentId", "xMm", "yMm", "rotation"],
+      "properties": {
+        "componentId": {"$ref": "#/$defs/id"}, "xMm": {"$ref": "#/$defs/mm"}, "yMm": {"$ref": "#/$defs/mm"},
+        "rotation": {"$ref": "#/$defs/rotation"}
+      }
+    },
+    "wire": {
+      "type": "object", "additionalProperties": false, "required": ["id", "fromPinId", "toPinId", "points"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "fromPinId": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+        "toPinId": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+        "points": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/point"}}
+      }
+    },
+    "netLabel": {
+      "type": "object", "additionalProperties": false, "required": ["id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "pinId": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+        "at": {"oneOf": [{"$ref": "#/$defs/point"}, {"type": "null"}]}
+      }
+    },
+    "point": {
+      "type": "object", "additionalProperties": false, "required": ["xMm", "yMm"],
+      "properties": {"xMm": {"$ref": "#/$defs/mm"}, "yMm": {"$ref": "#/$defs/mm"}}
+    },
+    "trace": {
+      "type": "object", "additionalProperties": false, "required": ["id", "netId", "layer", "widthMm", "points"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "netId": {"$ref": "#/$defs/id"}, "layer": {"$ref": "#/$defs/layer"},
+        "widthMm": {"type": "number", "minimum": 0.05, "maximum": 20},
+        "points": {"type": "array", "minItems": 2, "maxItems": 1000, "items": {"$ref": "#/$defs/point"}}
+      }
+    },
+    "via": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "netId", "xMm", "yMm", "diameterMm", "drillMm"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "netId": {"$ref": "#/$defs/id"},
+        "xMm": {"$ref": "#/$defs/mm"}, "yMm": {"$ref": "#/$defs/mm"},
+        "diameterMm": {"type": "number", "minimum": 0.2, "maximum": 10},
+        "drillMm": {"type": "number", "minimum": 0.1, "maximum": 10}
+      }
+    },
+    "zone": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "netId", "layer", "outline", "clearanceMm"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "netId": {"$ref": "#/$defs/id"}, "layer": {"$ref": "#/$defs/layer"},
+        "outline": {"type": "array", "minItems": 3, "maxItems": 1000, "items": {"$ref": "#/$defs/point"}},
+        "clearanceMm": {"type": "number", "minimum": 0.1, "maximum": 10}
+      }
+    },
+    "board": {
+      "type": "object", "additionalProperties": false,
+      "required": ["widthMm", "heightMm", "thicknessMm", "clearanceMm", "placements", "traces", "vias", "zones"],
+      "properties": {
+        "widthMm": {"$ref": "#/$defs/positiveMm"}, "heightMm": {"$ref": "#/$defs/positiveMm"},
+        "thicknessMm": {"$ref": "#/$defs/positiveMm"}, "clearanceMm": {"$ref": "#/$defs/positiveMm"},
+        "placements": {"type": "array", "items": {"$ref": "#/$defs/placement"}},
+        "traces": {"type": "array", "items": {"$ref": "#/$defs/trace"}},
+        "vias": {"type": "array", "items": {"$ref": "#/$defs/via"}},
+        "zones": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/zone"}}
+      }
+    }
+  }
+}

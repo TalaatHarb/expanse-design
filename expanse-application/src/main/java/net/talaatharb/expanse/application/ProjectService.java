@@ -15,10 +15,12 @@ import net.talaatharb.expanse.dto.ApiModels.*;
 import net.talaatharb.expanse.library.ComponentLibrary;
 import net.talaatharb.expanse.pcb.BoardAnalyzer;
 import net.talaatharb.expanse.pcb.BoardEditor;
+import net.talaatharb.expanse.pcb.FabricationExporter;
 import net.talaatharb.expanse.pcb.PcbGeometry;
 import net.talaatharb.expanse.schematic.SchematicEditor;
 import net.talaatharb.expanse.simulation.CircuitSimulator;
 import net.talaatharb.expanse.simulation.LogicSimulator;
+import net.talaatharb.expanse.simulation.SpiceExporter;
 import net.talaatharb.expanse.validation.DesignValidator;
 import lombok.extern.slf4j.Slf4j;
 
@@ -34,6 +36,8 @@ public final class ProjectService {
     private final LogicSimulator logicSimulator = new LogicSimulator();
     private final BoardAnalyzer boardAnalyzer = new BoardAnalyzer();
     private final AssemblyBuilder assemblyBuilder = new AssemblyBuilder();
+    private final FabricationExporter fabricationExporter = new FabricationExporter();
+    private final SpiceExporter spiceExporter = new SpiceExporter();
 
     public ProjectService(ProjectRepository repository, ProjectJson json, ComponentLibrary library,
                           SchematicEditor editor, DesignValidator validator) {
@@ -218,6 +222,39 @@ public final class ProjectService {
                 scene.findings().stream().map(VIEWS::diagnostic).toList());
     }
 
+    public FabricationView fabrication(UUID id) {
+        Project project = repository.get(id);
+        var files = fabricationExporter.export(project).stream()
+                .map(f -> new FabricationFileView(f.name(), f.mediaType(), f.content())).toList();
+        LOG.info("action=pcb.export_fabrication project={} revision={} files={} outcome=success", id,
+                project.revision(), files.size());
+        return new FabricationView(id, project.revision(), files,
+                boardAnalyzer.analyze(project).findings().stream().map(VIEWS::diagnostic).toList());
+    }
+
+    public SpiceView exportSpice(UUID id) {
+        Project project = repository.get(id);
+        var export = spiceExporter.export(project);
+        return new SpiceView(id, project.revision(), export.netlist(), export.warnings());
+    }
+
+    /** Creates a new project from a SPICE netlist; unsupported elements are reported as warnings. */
+    public SpiceImportResult importSpice(SpiceImport request) {
+        var plan = new SpiceImporter().plan(request.netlist());
+        String name = request.name() != null && !request.name().isBlank() ? request.name()
+                : plan.title().isBlank() ? "Imported netlist" : plan.title();
+        Project project = Project.create(name.length() > 200 ? name.substring(0, 200) : name);
+        var operations = plan.operations();
+        for (int from = 0; from < operations.size(); from += 500) {
+            project = engine.apply(project, operations.subList(from, Math.min(operations.size(), from + 500)))
+                    .project();
+        }
+        repository.insert(project);
+        LOG.info("action=project.import_spice project={} components={} outcome=success", project.id(),
+                project.components().size());
+        return new SpiceImportResult(snapshot(project), plan.warnings());
+    }
+
     public Document exportProject(UUID id) {
         return new Document(json.write(repository.get(id)));
     }
@@ -271,7 +308,7 @@ public final class ProjectService {
     public List<Capability> capabilities() {
         return List.of(
                 new Capability("project.lifecycle", true,
-                        "Revisioned projects, canonical JSON 0.4 import/export with 0.1-0.3 migration"),
+                        "Revisioned projects, canonical JSON 0.5 import/export with 0.1-0.4 migration"),
                 new Capability("schematic.basic", true,
                         "R, L, C, sources, rails, ground, switches, BJTs and MOSFETs with typed parameters"),
                 new Capability("schematic.wires", true, "Wire graphics with bends, free ends and junctions"),
@@ -285,7 +322,13 @@ public final class ProjectService {
                         + "behavioural logic gates"),
                 new Capability("simulation.logic", true, LogicSimulator.ENGINE + " " + LogicSimulator.VERSION
                         + ": event-driven 0/1/X/Z logic with propagation delays, clocks and switch events"),
+                new Capability("simulation.spice", true,
+                        "SPICE3/ngspice netlist export and import of R, L, C, sources, diodes, BJTs and MOSFETs"),
                 new Capability("pcb", true, "Two-layer placement, orthogonal routing, ratsnest and basic DRC"),
+                new Capability("pcb.copper", true, "Vias and copper zones with clearance-aware fills"),
+                new Capability("pcb.autoroute", true, "Grid A* autorouter on both layers with vias"),
+                new Capability("pcb.fabrication", true,
+                        "Gerber RS-274X X2 layers, Excellon drill, BOM and pick-and-place CSV"),
                 new Capability("assembly3d", true, "Parametric bodies derived from the board; collision checks"),
                 new Capability("mcp.read", true, "Separate stdio MCP bridge using the same authenticated API"),
                 new Capability("mcp.mutate", true, "Preview/apply change sets; mutations configurable per bridge"));
@@ -318,8 +361,11 @@ public final class ProjectService {
         p.nets().forEach(n -> {
             ids.add(n.id());
             n.wires().forEach(w -> ids.add(w.id()));
+            n.labels().forEach(l -> ids.add(l.id()));
         });
         p.board().traces().forEach(t -> ids.add(t.id()));
+        p.board().vias().forEach(v -> ids.add(v.id()));
+        p.board().zones().forEach(z -> ids.add(z.id()));
         return ids;
     }
 

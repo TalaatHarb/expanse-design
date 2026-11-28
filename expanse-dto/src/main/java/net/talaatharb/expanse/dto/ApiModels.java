@@ -81,8 +81,21 @@ public final class ApiModels {
                           double xMm, double yMm, double widthMm, double heightMm, double drillMm) {
     }
 
+    public record ViaView(UUID id, UUID netId, double xMm, double yMm, double diameterMm, double drillMm) {
+    }
+
+    /** An axis-aligned rectangle; {@code xMm}/{@code yMm} is the minimum corner. */
+    public record RectView(double xMm, double yMm, double widthMm, double heightMm) {
+    }
+
+    /** A copper pour; {@code fill} is derived from the board (other-net copper is kept at the clearance). */
+    public record ZoneView(UUID id, UUID netId, String layer, List<PointView> outline, double clearanceMm,
+                           List<RectView> fill) {
+    }
+
     public record BoardView(double widthMm, double heightMm, double thicknessMm, double clearanceMm,
-                            List<PlacementView> placements, List<TraceView> traces, List<PadView> pads) {
+                            List<PlacementView> placements, List<TraceView> traces, List<PadView> pads,
+                            List<ViaView> vias, List<ZoneView> zones) {
     }
 
     public record Snapshot(UUID id, String name, long revision, List<SheetView> sheets,
@@ -165,11 +178,17 @@ public final class ApiModels {
             @JsonSubTypes.Type(value = PlaceNetLabelOp.class, name = "place_net_label"),
             @JsonSubTypes.Type(value = DeleteNetLabelOp.class, name = "delete_net_label"),
             @JsonSubTypes.Type(value = DefinePartOp.class, name = "define_part"),
-            @JsonSubTypes.Type(value = DeletePartOp.class, name = "delete_part")})
+            @JsonSubTypes.Type(value = DeletePartOp.class, name = "delete_part"),
+            @JsonSubTypes.Type(value = AddViaOp.class, name = "add_via"),
+            @JsonSubTypes.Type(value = DeleteViaOp.class, name = "delete_via"),
+            @JsonSubTypes.Type(value = AddZoneOp.class, name = "add_zone"),
+            @JsonSubTypes.Type(value = DeleteZoneOp.class, name = "delete_zone"),
+            @JsonSubTypes.Type(value = AutorouteOp.class, name = "autoroute")})
     public sealed interface Operation permits PlaceOp, MoveOp, SetPropertiesOp, SetReferenceOp, DeleteComponentOp,
             ConnectOp, DisconnectOp, RenameNetOp, RenameProjectOp, SyncBoardOp, PlaceFootprintOp,
             UnplaceFootprintOp, SetBoardOp, RouteOp, AddTraceOp, DeleteTraceOp, DrawWireOp, DeleteWireOp,
-            PlaceNetLabelOp, DeleteNetLabelOp, DefinePartOp, DeletePartOp {
+            PlaceNetLabelOp, DeleteNetLabelOp, DefinePartOp, DeletePartOp, AddViaOp, DeleteViaOp, AddZoneOp,
+            DeleteZoneOp, AutorouteOp {
         /** True when the operation removes user data and may need explicit approval. */
         default boolean destructive() {
             return false;
@@ -302,6 +321,43 @@ public final class ApiModels {
         }
     }
 
+    /** A through via on a net; diameter defaults to 0.8 mm and drill to 0.4 mm. */
+    public record AddViaOp(@NotBlank String net, double xMm, double yMm, Double diameterMm, Double drillMm)
+            implements Operation {
+    }
+
+    public record DeleteViaOp(@NotNull UUID viaId) implements Operation {
+        @Override
+        public boolean destructive() {
+            return true;
+        }
+    }
+
+    /**
+     * A copper pour on {@code net} bounded by the {@code outline} polygon; layer defaults to bottom and clearance to
+     * 0.3 mm (never less than the board clearance). The fill is recomputed on every change.
+     */
+    public record AddZoneOp(@NotBlank String net, String layer,
+                            @NotNull @Size(min = 3, max = 1000) List<@NotNull PointView> outline, Double clearanceMm)
+            implements Operation {
+    }
+
+    public record DeleteZoneOp(@NotNull UUID zoneId) implements Operation {
+        @Override
+        public boolean destructive() {
+            return true;
+        }
+    }
+
+    /**
+     * Routes the unrouted connections of {@code nets} (all nets when empty) on both layers with vias. Width defaults
+     * to 0.4 mm, via diameter to 0.8 mm and drill to 0.4 mm. Connections that cannot be routed are reported in the
+     * change list and left as airwires.
+     */
+    public record AutorouteOp(@Size(max = 1000) List<@NotBlank String> nets, Double widthMm, Double viaDiameterMm,
+                              Double viaDrillMm) implements Operation {
+    }
+
     public record ChangeSet(@PositiveOrZero long expectedRevision,
                             @NotNull @Size(min = 1, max = 500) List<@NotNull @Valid Operation> operations) {
     }
@@ -377,6 +433,30 @@ public final class ApiModels {
     public record SolidView(String id, UUID ownerId, String label, String role, String shape, double xMm,
                             double yMm, double zMm, double sizeXMm, double sizeYMm, double sizeZMm,
                             double rotationDeg, String color) {
+    }
+
+    // ---- Manufacturing and SPICE ----
+
+    public record FabricationFileView(String name, String mediaType, String content) {
+    }
+
+    /**
+     * Gerber RS-274X layers (F_Cu, B_Cu, F_Mask, B_Mask, F_SilkS, Edge_Cuts), an Excellon drill file, a bill of
+     * materials and a pick-and-place file, plus the current board findings so errors are visible before ordering.
+     */
+    public record FabricationView(UUID projectId, long revision, List<FabricationFileView> files,
+                                  List<Diagnostic> findings) {
+    }
+
+    /** A SPICE netlist of the analog parts; warnings list parts that were approximated or left out. */
+    public record SpiceView(UUID projectId, long revision, String netlist, List<String> warnings) {
+    }
+
+    /** Name defaults to the netlist title line. */
+    public record SpiceImport(@Size(max = 200) String name, @NotBlank @Size(max = 1_048_576) String netlist) {
+    }
+
+    public record SpiceImportResult(Snapshot snapshot, List<String> warnings) {
     }
 
     public record AssemblyView(UUID projectId, long revision, double boardWidthMm, double boardHeightMm,

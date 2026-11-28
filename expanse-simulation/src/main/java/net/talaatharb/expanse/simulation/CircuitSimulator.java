@@ -29,7 +29,7 @@ public final class CircuitSimulator {
     public static final int MAX_STEPS = 20_000;
     public static final int MAX_POINTS = 2_000;
     private static final double GMIN = 1e-12;
-    private static final double VT = 0.025852;
+    static final double VT = 0.025852;
     private static final double OFF_CONDUCTANCE = 1e-12;
     /** LEDs are specified by their forward voltage at this current. */
     static final double LED_REFERENCE_CURRENT = 0.02;

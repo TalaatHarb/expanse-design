@@ -11,16 +11,20 @@ import net.talaatharb.expanse.domain.Design.Component;
 import net.talaatharb.expanse.domain.Design.Net;
 import net.talaatharb.expanse.domain.Design.Point;
 import net.talaatharb.expanse.domain.Design.Project;
+import net.talaatharb.expanse.domain.Design.Via;
 import net.talaatharb.expanse.domain.Design.Wire;
+import net.talaatharb.expanse.domain.Design.Zone;
 import net.talaatharb.expanse.domain.DesignException;
 import net.talaatharb.expanse.dto.ApiModels.*;
 import net.talaatharb.expanse.library.ComponentLibrary;
+import net.talaatharb.expanse.pcb.AutoRouter;
 import net.talaatharb.expanse.pcb.BoardEditor;
 import net.talaatharb.expanse.schematic.SchematicEditor;
 
 /** Applies a batch of operations in memory. The result is a single revision after the base project. */
 public final class ChangeEngine {
     public static final double DEFAULT_TRACE_WIDTH_MM = 0.4;
+    public static final double DEFAULT_ZONE_CLEARANCE_MM = 0.3;
 
     public record Outcome(Project project, List<String> changes, List<CreatedObject> created) {
     }
@@ -160,6 +164,51 @@ public final class ChangeEngine {
             case DeleteTraceOp op -> {
                 changes.add("Deleted trace " + op.traceId());
                 yield board.deleteTrace(p, op.traceId());
+            }
+            case AddViaOp op -> {
+                Net net = net(p, op.net());
+                UUID id = UUID.randomUUID();
+                Project next = board.addVia(p, new Via(id, net.id(), op.xMm(), op.yMm(),
+                        or(op.diameterMm(), Via.DEFAULT_DIAMETER_MM), or(op.drillMm(), Via.DEFAULT_DRILL_MM)));
+                created.add(new CreatedObject("via", net.name(), id));
+                changes.add(String.format(java.util.Locale.ROOT, "Added via on %s at (%.3f, %.3f) mm", net.name(),
+                        op.xMm(), op.yMm()));
+                yield next;
+            }
+            case DeleteViaOp op -> {
+                changes.add("Deleted via " + op.viaId());
+                yield board.deleteVia(p, op.viaId());
+            }
+            case AddZoneOp op -> {
+                Net net = net(p, op.net());
+                Design.require(op.outline() != null, "add_zone requires an outline");
+                UUID id = UUID.randomUUID();
+                String layer = op.layer() == null ? "bottom" : op.layer();
+                Project next = board.addZone(p, new Zone(id, net.id(), layer,
+                        op.outline().stream().map(pt -> new Point(pt.xMm(), pt.yMm())).toList(),
+                        or(op.clearanceMm(), DEFAULT_ZONE_CLEARANCE_MM)));
+                created.add(new CreatedObject("zone", net.name(), id));
+                changes.add("Added " + layer + " copper zone on " + net.name());
+                yield next;
+            }
+            case DeleteZoneOp op -> {
+                changes.add("Deleted zone " + op.zoneId());
+                yield board.deleteZone(p, op.zoneId());
+            }
+            case AutorouteOp op -> {
+                var nets = op.nets() == null ? java.util.Set.<UUID>of() : op.nets().stream()
+                        .map(n -> net(p, n).id()).collect(java.util.stream.Collectors.toSet());
+                var routed = board.autoroute(p, new AutoRouter.Options(nets, or(op.widthMm(), DEFAULT_TRACE_WIDTH_MM),
+                        or(op.viaDiameterMm(), Via.DEFAULT_DIAMETER_MM), or(op.viaDrillMm(), Via.DEFAULT_DRILL_MM)));
+                var result = routed.result();
+                java.util.Map<UUID, String> names = new HashMap<>();
+                p.nets().forEach(n -> names.put(n.id(), n.name()));
+                result.traces().forEach(t -> created.add(new CreatedObject("trace", names.get(t.netId()), t.id())));
+                result.vias().forEach(v -> created.add(new CreatedObject("via", names.get(v.netId()), v.id())));
+                changes.add("Autorouted " + result.routed() + " of " + result.attempted() + " connection(s) with "
+                        + result.traces().size() + " trace(s) and " + result.vias().size() + " via(s)"
+                        + (result.unrouted().isEmpty() ? "" : "; unrouted: " + String.join(", ", result.unrouted())));
+                yield routed.project();
             }
             case DrawWireOp op -> drawWire(p, op, changes, created);
             case DeleteWireOp op -> {

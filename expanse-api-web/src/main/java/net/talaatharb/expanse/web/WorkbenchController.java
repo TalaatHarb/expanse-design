@@ -106,6 +106,21 @@ public final class WorkbenchController implements WorkbenchApi {
     }
 
     @Override
+    public FabricationView fabrication(UUID id) {
+        return service.fabrication(id);
+    }
+
+    @Override
+    public SpiceView exportSpice(UUID id) {
+        return service.exportSpice(id);
+    }
+
+    @Override
+    public SpiceImportResult importSpice(SpiceImport request) {
+        return service.importSpice(request);
+    }
+
+    @Override
     public Snapshot replaceDocument(UUID id, ReplaceDocument request) {
         return service.replaceDocument(id, request);
     }

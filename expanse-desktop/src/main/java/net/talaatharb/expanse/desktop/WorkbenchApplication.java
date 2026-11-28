@@ -360,8 +360,11 @@ public final class WorkbenchApplication extends Application implements Workbench
             }
         });
         var settings = item("Settings...", "Shortcut+Comma", this::openSettings);
+        var importSpice = item("Import SPICE netlist...", null, this::importSpice);
+        var exportSpice = item("Export SPICE netlist...", null, this::exportSpice);
+        var exportFabrication = item("Export fabrication files...", null, this::exportFabrication);
         var file = new Menu("File", null, newProject, open, openServer, new SeparatorMenuItem(), save, saveAs,
-                new SeparatorMenuItem(), reload, close, new SeparatorMenuItem(), settings, new SeparatorMenuItem(), exit);
+                new SeparatorMenuItem(), importSpice, exportSpice, exportFabrication, new SeparatorMenuItem(), reload, close, new SeparatorMenuItem(), settings, new SeparatorMenuItem(), exit);
 
         var cut = item("Cut", "Shortcut+X", () -> clipboard(TextInputControl::cut, schematic::cut));
         var copy = item("Copy", "Shortcut+C", () -> clipboard(TextInputControl::copy, schematic::copy));
@@ -839,6 +842,92 @@ public final class WorkbenchApplication extends Application implements Workbench
                 status("Saved " + state.file() + " (the previous file, if any, is kept as .bak)");
             });
         }
+    }
+
+    private static final String[] SPICE_EXTENSIONS = {"*.cir", "*.sp", "*.spice", "*.net", "*.ckt"};
+
+    private void importSpice() {
+        if (!confirmDiscard("importing a netlist")) {
+            return;
+        }
+        var chooser = new FileChooser();
+        chooser.setTitle("Import SPICE netlist");
+        chooser.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("SPICE netlist", SPICE_EXTENSIONS),
+                new FileChooser.ExtensionFilter("All files", "*.*"));
+        File file = fileDialog != null ? fileDialog.choose(false) : chooser.showOpenDialog(stage);
+        if (file == null) {
+            return;
+        }
+        Path path = file.toPath();
+        String name = path.getFileName().toString().replaceFirst("\\.[^.]*$", "");
+        run(() -> {
+            String text = java.nio.file.Files.readString(path);
+            var result = api.importSpice(new SpiceImport(null, text));
+            session.openFromServer(result.snapshot().id());
+            return java.util.Map.entry(state(null), result.warnings());
+        }, imported -> {
+            publish(imported.getKey());
+            var warnings = imported.getValue();
+            status("Imported " + name + " (" + imported.getKey().snapshot().components().size() + " parts"
+                    + (warnings.isEmpty() ? ")" : ", " + warnings.size() + " warning(s))"));
+            if (!warnings.isEmpty()) {
+                var alert = new Alert(Alert.AlertType.WARNING, String.join("\n", warnings));
+                alert.setHeaderText("Some netlist lines were not imported exactly");
+                alert.initOwner(stage);
+                alert.show();
+            }
+        });
+    }
+
+    private void exportSpice() {
+        if (current == null) {
+            return;
+        }
+        var chooser = new FileChooser();
+        chooser.setTitle("Export SPICE netlist");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("SPICE netlist", SPICE_EXTENSIONS));
+        chooser.setInitialFileName(fileBase() + ".cir");
+        File file = fileDialog != null ? fileDialog.choose(true) : chooser.showSaveDialog(stage);
+        if (file == null) {
+            return;
+        }
+        UUID id = current.id();
+        run(() -> {
+            var spice = api.exportSpice(id);
+            java.nio.file.Files.writeString(file.toPath(), spice.netlist());
+            return spice.warnings();
+        }, warnings -> status("Exported " + file.getName() + (warnings.isEmpty() ? ""
+                : " (" + warnings.size() + " part(s) approximated or left out: " + String.join(" ", warnings) + ")")));
+    }
+
+    private void exportFabrication() {
+        if (current == null) {
+            return;
+        }
+        var chooser = new javafx.stage.DirectoryChooser();
+        chooser.setTitle("Export fabrication files to folder");
+        File directory = fileDialog != null ? fileDialog.choose(true) : chooser.showDialog(stage);
+        if (directory == null) {
+            return;
+        }
+        UUID id = current.id();
+        run(() -> {
+            var fabrication = api.fabrication(id);
+            java.nio.file.Files.createDirectories(directory.toPath());
+            for (var f : fabrication.files()) {
+                java.nio.file.Files.writeString(directory.toPath().resolve(f.name()), f.content());
+            }
+            return fabrication;
+        }, fabrication -> {
+            long errors = fabrication.findings().stream().filter(f -> f.severity().equals("ERROR")).count();
+            status("Wrote " + fabrication.files().size() + " fabrication files to " + directory
+                    + (errors == 0 ? "" : " \u2014 the board still has " + errors + " DRC error(s)"));
+        });
+    }
+
+    private String fileBase() {
+        return currentFile != null ? currentFile.getFileName().toString().replaceFirst("\\.[^.]*$", "")
+                : current.name().replaceAll("[^A-Za-z0-9._ -]", "_");
     }
 
     private void renameProject() {

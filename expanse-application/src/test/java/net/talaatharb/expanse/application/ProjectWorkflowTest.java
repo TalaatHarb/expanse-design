@@ -356,7 +356,7 @@ class ProjectWorkflowTest {
         Project reopened = json.read(saved);
         assertThat(reopened).isEqualTo(repository.get(project.id()));
         assertThat(json.write(reopened)).isEqualTo(saved);
-        assertThat(reopened.schemaVersion()).isEqualTo("0.4");
+        assertThat(reopened.schemaVersion()).isEqualTo("0.5");
 
         assertThatThrownBy(() -> service.importProject(new Document(saved)))
                 .isInstanceOfSatisfying(DesignException.class, e -> assertThat(e.code()).isEqualTo("PROJECT_EXISTS"));
@@ -405,7 +405,7 @@ class ProjectWorkflowTest {
     @Test
     void importRejectsUnsupportedUnknownMissingAndMalformedDataWithoutOverwriting() {
         String original = service.exportProject(project.id()).json();
-        assertThatThrownBy(() -> json.read(original.replace("\"0.4\"", "\"99.0\"")))
+        assertThatThrownBy(() -> json.read(original.replace("\"0.5\"", "\"99.0\"")))
                 .isInstanceOfSatisfying(DesignException.class,
                         e -> assertThat(e.code()).isEqualTo("UNSUPPORTED_SCHEMA"));
         assertThatThrownBy(() -> json.read(original.replaceFirst("\\{", "{\"unknown\":true,")))

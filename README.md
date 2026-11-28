@@ -47,17 +47,24 @@ logic gates/sources and sample 74HC ICs (00, 04, 08, 32, 86, 74)** across every 
   have behavioural analog models, and a separate event-driven four-state
   (0/1/X/Z) logic analysis produces timing diagrams.
 - **PCB**: board outline and rules, footprint sync/placement, two-layer
-  orthogonal routing, ratsnest, shorts/clearance/outline DRC.
+  routing, vias, copper zones (pours) filled around foreign copper with
+  clearance, a grid autorouter that uses both layers and vias, ratsnest,
+  shorts/clearance/outline DRC.
+- **Fabrication**: Gerber RS-274X (copper, mask, silkscreen, outline), Excellon
+  drill, BOM and pick-and-place CSV, from the desktop (File > Export fabrication
+  files...), REST or MCP.
+- **SPICE**: export a netlist (`.op` deck with diode/BJT/MOSFET models, op-amps as
+  controlled sources) and import R/C/L/V/D/Q/M netlists as a new laid-out project.
 - **3D**: parametric component bodies on the board (orthographic JavaFX 3D view with a camera rig after
   Oracle's sample application), collision/overhang checks, STL/OBJ overlay import.
-- **Persistence**: canonical JSON schema 0.4 (0.1-0.3 files migrate on open), H2 file
+- **Persistence**: canonical JSON schema 0.5 (0.1-0.4 files migrate on open), H2 file
   or PostgreSQL storage, atomic file save with `.bak`, revision conflict detection.
-- **MCP**: 34 policy-gated tools over stdio, including transactional change sets.
+- **MCP**: 40 policy-gated tools over stdio, including transactional change sets.
 
 All edits from the desktop, REST and MCP go through one transactional change-set
 engine: a batch of operations is previewed or applied as a single revision.
-Not yet implemented: hierarchy, graphical symbol/footprint drawing, autorouting,
-fabrication exports, SPICE import, STEP import.
+Not yet implemented: hierarchy, graphical symbol/footprint drawing, SPICE
+transient/AC directives, STEP import.
 
 ## Downloads
 
@@ -162,9 +169,14 @@ Override the data directory with `EXPANSE_DATA_DIR` or desktop
   Logic shows a timing diagram (X shaded red, Z dashed) and final net levels.
 - **PCB**: *Sync from schematic* places footprints; drag parts, R rotates; click a
   pad then a pad on the same net to route on the chosen layer, or *Route all
-  airwires*. Select a trace and press Del to delete it, or *Delete all traces*
-  (confirmed, one revision) to start routing over. *Board...* edits size,
-  thickness and clearance. The DRC list highlights offending objects.
+  airwires*, or *Autoroute* (both layers with vias, keeps clearance). The *Via*
+  tool drops a via on the chosen net; the *Zone* tool adds outline corners
+  (double-click or Enter finishes) and *Pour board* covers the whole board on the
+  chosen net and layer. Select a trace, via or zone and press Del to delete it, or
+  *Delete all traces* (traces and vias, confirmed, one revision) to start over.
+  *Board...* edits size, thickness and clearance. The DRC list highlights
+  offending objects. *File* has *Import/Export SPICE netlist...* and *Export
+  fabrication files...* (Gerber, drill, BOM, pick-and-place into a folder).
 - **3D**: drag to orbit, scroll/right-drag to zoom, middle or Shift-drag to pan;
   Z resets, T is top view, X toggles axes, W toggles wireframe. *Import model...*
   overlays an STL or OBJ (millimetres, Z up) for visual reference only.
@@ -263,11 +275,12 @@ When the desktop generated the token, use the contents of
 binding. Tokens must contain at least 32 URL-safe characters. MCP stdout contains
 only protocol messages; logs go to stderr.
 
-The bridge exposes 18 read-only tools (projects, components, nets, library,
+The bridge exposes 20 read-only tools (projects, components, nets, library,
 project parts, diagnostics, simulation, PCB board/analysis, 3D scene/checks,
-undo history, change preview), 14 editing tools (`project.create`,
-`project.apply_changes`, placement, wiring, drawn wires, net labels, part definitions,
-properties, board sync/placement/routing, undo/redo) and 2 destructive tools. Policy
+undo history, change preview, fabrication and SPICE export), 18 editing tools
+(`project.create`, `project.apply_changes`, placement, wiring, drawn wires, net
+labels, part definitions, properties, board sync/placement/routing, vias, zones,
+autorouting, SPICE import, undo/redo) and 2 destructive tools. Policy
 switches: `--expanse.mcp.allow-mutations=false` exposes only read tools;
 `--expanse.mcp.allow-destructive=true` additionally exposes deletes and lets
 `project.apply_changes` run destructive operations. Every tool carries MCP
@@ -277,7 +290,7 @@ read-only/destructive/idempotent hints. See [MCP and security](docs/architecture
 
 - [Architecture and decisions](docs/architecture/overview.md)
 - [Implementation roadmap and acceptance coverage](docs/implementation-roadmap.md)
-- [Project schema 0.4](schemas/project/0.4.schema.json),
+- [Project schema 0.5](schemas/project/0.5.schema.json),
   [all-parts fixture](fixtures/projects/all-parts.json), and the
   legacy [0.1](fixtures/projects/legacy/resistor-loop-0.1.json) and
   [0.2](fixtures/projects/legacy/logic-demo-0.2.json) fixtures used for migration tests

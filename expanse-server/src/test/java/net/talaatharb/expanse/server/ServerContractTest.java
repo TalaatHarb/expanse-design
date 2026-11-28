@@ -57,7 +57,7 @@ class ServerContractTest {
                     assertThat(e.error().currentRevision()).isEqualTo(2);
                 });
         Document document = client.exportProject(id);
-        assertThat(document.json()).contains("\"schemaVersion\" : \"0.4\"");
+        assertThat(document.json()).contains("\"schemaVersion\" : \"0.5\"");
         assertThatThrownBy(() -> client.importProject(document))
                 .isInstanceOfSatisfying(ConnectorException.class, e -> assertThat(e.status()).isEqualTo(409));
         assertThat(client.capabilities()).anyMatch(c -> c.id().equals("simulation") && c.available());
@@ -89,6 +89,44 @@ class ServerContractTest {
         assertThat(analog.nodeVoltages().get("FB")).isCloseTo(5, within(1e-6));
         assertThat(client.analyzeBoard(project.id()).pads()).hasSize(28);
         assertThat(client.assembly(project.id()).solids()).filteredOn(s -> s.role().equals("body")).hasSize(2);
+    }
+
+    @Test
+    void copperAutorouteFabricationAndSpiceWorkOverFeign() {
+        var project = client.create(new CreateProject("Divider fab"));
+        var applied = client.applyChanges(project.id(), new ChangeSet(0, List.of(
+                new PlaceOp("builtin.dc-source", "V1", 0, 0, null, java.util.Map.of("voltage", "5"), null),
+                new PlaceOp("builtin.resistor", "R1", 20, 0, null, null, null),
+                new PlaceOp("builtin.resistor", "R2", 40, 0, null, null, null),
+                new PlaceOp("builtin.ground", "G1", 0, 20, null, null, null),
+                new ConnectOp("VIN", List.of("V1.+", "R1.1")),
+                new ConnectOp("MID", List.of("R1.2", "R2.1")),
+                new ConnectOp("GND", List.of("R2.2", "V1.-", "G1.GND")),
+                new SyncBoardOp(),
+                new AutorouteOp(null, null, null, null),
+                new AddViaOp("GND", 70, 50, null, null),
+                new AddZoneOp("GND", null, List.of(new PointView(1, 1), new PointView(79, 1), new PointView(79, 59),
+                        new PointView(1, 59)), null))));
+        assertThat(applied.changes()).anyMatch(c -> c.startsWith("Autorouted 3 of 3 connection(s)"));
+        var board = applied.snapshot().board();
+        assertThat(board.vias()).isNotEmpty();
+        assertThat(board.zones()).singleElement().satisfies(z -> assertThat(z.fill()).isNotEmpty());
+        assertThat(client.analyzeBoard(project.id()).airwires()).isEmpty();
+
+        var fabrication = client.fabrication(project.id());
+        assertThat(fabrication.files()).hasSize(9).extracting(FabricationFileView::name)
+                .contains("Divider_fab-F_Cu.gbr", "Divider_fab.drl", "Divider_fab-BOM.csv");
+        assertThat(fabrication.findings()).noneMatch(f -> f.severity().equals("ERROR"));
+
+        var spice = client.exportSpice(project.id());
+        assertThat(spice.netlist()).startsWith("Divider fab\n").contains("V1 VIN 0 DC 5\n", "R1 VIN MID 1k\n",
+                "R2 MID 0 1k\n").endsWith(".end\n");
+        var imported = client.importSpice(new SpiceImport(null, spice.netlist()));
+        assertThat(imported.warnings()).isEmpty();
+        assertThat(imported.snapshot().name()).isEqualTo("Divider fab");
+        assertThat(imported.snapshot().components()).hasSize(4);
+        var op = client.simulate(imported.snapshot().id(), new SimulationRequest("op", null, null, null, null));
+        assertThat(op.nodeVoltages().get("MID")).isCloseTo(2.5, within(1e-6));
     }
 
     @Test

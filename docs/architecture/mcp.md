@@ -19,8 +19,8 @@ annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`,
 
 | Kind | Tools |
 | --- | --- |
-| Read (18) | design.get_capabilities, project.list, project.get_summary, project.get_snapshot, schematic.list_components, schematic.get_component, schematic.list_nets, schematic.get_net, library.search_components, parts.list, design.get_violations, simulation.run, pcb.get_board, pcb.get_analysis, assembly.get_scene, assembly.check, project.get_history, project.preview_changes |
-| Edit (14) | project.create, project.apply_changes, schematic.place_component, schematic.move_component, schematic.connect_pins, schematic.set_properties, schematic.draw_wire, schematic.place_net_label, parts.define, pcb.sync_board, pcb.place_footprint, pcb.route, project.undo, project.redo |
+| Read (20) | design.get_capabilities, project.list, project.get_summary, project.get_snapshot, schematic.list_components, schematic.get_component, schematic.list_nets, schematic.get_net, library.search_components, parts.list, design.get_violations, simulation.run, pcb.get_board, pcb.get_analysis, assembly.get_scene, assembly.check, project.get_history, project.preview_changes, pcb.export_fabrication, simulation.export_spice |
+| Edit (18) | project.create, project.apply_changes, schematic.place_component, schematic.move_component, schematic.connect_pins, schematic.set_properties, schematic.draw_wire, schematic.place_net_label, parts.define, pcb.sync_board, pcb.place_footprint, pcb.route, pcb.add_via, pcb.add_zone, pcb.autoroute, project.import_spice, project.undo, project.redo |
 | Destructive (2) | schematic.delete_component, project.delete |
 
 Tool input schemas are generated with the registrations and reject unknown
@@ -48,7 +48,12 @@ it. Redefining a placed part updates its instances in the same revision;
 `delete_part` (destructive) fails with `PART_IN_USE` while instances exist.
 `project.undo`/`project.redo` restore earlier document states as new revisions,
 so they also need `expectedRevision`; `project.get_history` reports what can be
-undone or redone.
+undone or redone. `pcb.autoroute` routes unrouted connections (optionally only
+named nets) with traces and vias in one revision and lists what it could not
+route; zones are re-filled whenever the board is read. `pcb.export_fabrication`
+returns Gerber/Excellon/CSV file contents (`includeContent=false` for names and
+sizes only) plus DRC findings. `delete_via`/`delete_zone` are destructive
+operations available through `project.apply_changes`.
 
 ## Credentials and deployment
 

@@ -152,7 +152,7 @@ public final class WorkbenchTools {
                             args.has("zeroInitialConditions") ? args.bool("zeroInitialConditions") : null, events));
                     return downsample(report, args.integer("maxPoints", 2, 5000, 200));
                 });
-        add(tools, "pcb.get_board", "PCB board", "Read board outline, rules, placements, pads and traces.",
+        add(tools, "pcb.get_board", "PCB board", "Read board outline, rules, placements, pads, traces, vias and copper zones (with their computed fill).",
                 Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> {
                     var project = api.project(args.uuid("projectId"));
                     return Map.of("projectId", project.id(), "revision", project.revision(), "board", project.board());
@@ -160,6 +160,25 @@ public final class WorkbenchTools {
         add(tools, "pcb.get_analysis", "PCB analysis",
                 "Read the ratsnest (unrouted connections) and design-rule findings for the board.",
                 Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> api.analyzeBoard(args.uuid("projectId")));
+        add(tools, "pcb.export_fabrication", "Export fabrication files",
+                "Generate Gerber RS-274X layers (F_Cu, B_Cu, F_Mask, B_Mask, F_SilkS, Edge_Cuts), an Excellon drill "
+                        + "file, a BOM and a pick-and-place CSV, plus the current board findings. Set includeContent "
+                        + "to false to list file names and sizes only.",
+                Kind.READ, List.of(req("projectId", UUID_SCHEMA), opt("includeContent", Map.of("type", "boolean"))),
+                args -> {
+                    var fabrication = api.fabrication(args.uuid("projectId"));
+                    if (!args.has("includeContent") || args.bool("includeContent")) {
+                        return fabrication;
+                    }
+                    return Map.of("projectId", fabrication.projectId(), "revision", fabrication.revision(),
+                            "files", fabrication.files().stream().map(f -> Map.of("name", f.name(), "mediaType",
+                                    f.mediaType(), "bytes", f.content().length())).toList(),
+                            "findings", fabrication.findings());
+                });
+        add(tools, "simulation.export_spice", "Export SPICE netlist",
+                "Write the analog circuit as a SPICE3/ngspice netlist (node 0 is ground) with warnings for parts "
+                        + "that were approximated or left out.",
+                Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> api.exportSpice(args.uuid("projectId")));
         add(tools, "assembly.get_scene", "3D assembly scene",
                 "Read the 3D assembly: board, component bodies, pads and traces as positioned solids (mm, Z up).",
                 Kind.READ, List.of(req("projectId", UUID_SCHEMA)), args -> api.assembly(args.uuid("projectId")));
@@ -261,6 +280,43 @@ public final class WorkbenchTools {
                         opt("widthMm", Map.of("type", "number", "exclusiveMinimum", 0))),
                 args -> single(args, new RouteOp(args.string("from"), args.string("to"),
                         args.optionalString("layer"), args.optionalNumber("widthMm"))));
+        add(tools, "pcb.add_via", "Add via",
+                "Add a through via on a net at (xMm, yMm); diameter defaults to 0.8 mm and drill to 0.4 mm.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
+                        req("net", TEXT), req("xMm", NUMBER), req("yMm", NUMBER),
+                        opt("diameterMm", Map.of("type", "number", "exclusiveMinimum", 0)),
+                        opt("drillMm", Map.of("type", "number", "exclusiveMinimum", 0))),
+                args -> single(args, new AddViaOp(args.string("net"), args.number("xMm"), args.number("yMm"),
+                        args.optionalNumber("diameterMm"), args.optionalNumber("drillMm"))));
+        add(tools, "pcb.add_zone", "Add copper zone",
+                "Add a copper pour on a net bounded by a polygon (board mm, at least 3 points). The fill keeps "
+                        + "clearanceMm (default 0.3) from other nets and only keeps islands touching the net; it "
+                        + "connects same-net pads like traces. Layer defaults to bottom.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
+                        req("net", TEXT), req("outline", schema(new TypeReference<List<PointView>>() { }.getType())),
+                        opt("layer", Map.of("type", "string", "enum", List.of("top", "bottom"))),
+                        opt("clearanceMm", Map.of("type", "number", "exclusiveMinimum", 0))),
+                args -> single(args, new AddZoneOp(args.string("net"), args.optionalString("layer"),
+                        operationReader.convertValue(args.values.get("outline"),
+                                new TypeReference<List<PointView>>() { }), args.optionalNumber("clearanceMm"))));
+        add(tools, "pcb.autoroute", "Autoroute",
+                "Route the unrouted connections (all nets, or only nets) on both layers with vias, keeping the "
+                        + "board clearance. Connections that cannot be routed stay as airwires and are listed in "
+                        + "the changes. Check pcb.get_analysis afterwards.",
+                Kind.WRITE, List.of(req("projectId", UUID_SCHEMA), req("expectedRevision", REVISION),
+                        opt("nets", Map.of("type", "array", "maxItems", 1000, "items", TEXT)),
+                        opt("widthMm", Map.of("type", "number", "exclusiveMinimum", 0)),
+                        opt("viaDiameterMm", Map.of("type", "number", "exclusiveMinimum", 0)),
+                        opt("viaDrillMm", Map.of("type", "number", "exclusiveMinimum", 0))),
+                args -> single(args, new AutorouteOp(args.has("nets") ? args.strings("nets") : null,
+                        args.optionalNumber("widthMm"), args.optionalNumber("viaDiameterMm"),
+                        args.optionalNumber("viaDrillMm"))));
+        add(tools, "project.import_spice", "Import SPICE netlist",
+                "Create a new project from a SPICE netlist (R, C, L, DC V sources, D, Q, M and .model cards). "
+                        + "Node 0 gets a ground symbol; other nodes become nets. Returns the snapshot and warnings.",
+                Kind.WRITE, List.of(req("netlist", Map.of("type", "string", "minLength", 1, "maxLength", 1_048_576)),
+                        opt("name", TEXT)),
+                args -> api.importSpice(new SpiceImport(args.optionalString("name"), args.string("netlist"))));
         add(tools, "project.undo", "Undo",
                 "Undo the latest edit (by anyone: the app, REST or MCP) by restoring the previous content as a new "
                         + "revision. Reversible with project.redo.",

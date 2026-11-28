@@ -106,7 +106,9 @@
       } ],
       "widthMm" : 0.4
     } ],
-    "widthMm" : 80.0
+    "vias" : [ ],
+    "widthMm" : 80.0,
+    "zones" : [ ]
   },
   "components" : [ {
     "definition" : {
@@ -1334,7 +1336,7 @@
   } ],
   "parts" : [ ],
   "revision" : 2,
-  "schemaVersion" : "0.4",
+  "schemaVersion" : "0.5",
   "sheets" : [ {
     "id" : "d8fe7fad-ad60-4bce-8a41-f159b984ec02",
     "name" : "Main"

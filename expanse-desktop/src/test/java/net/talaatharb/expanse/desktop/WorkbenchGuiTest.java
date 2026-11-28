@@ -190,7 +190,83 @@ class WorkbenchGuiTest extends FxRobot {
         assertThat(netOf("R1", 0).pinIds()).hasSize(2);
     }
 
+    @Test
+    void layoutAutorouteZoneFabricationSpiceAnd3d() throws Exception {
+        newProject("Board");
+        placePart("DC voltage source", 10, 20);
+        placePart("Resistor", 30, 10);
+        placePart("Resistor", 30, 30);
+        placePart("Ground", 10, 45);
+        wire("V1", 0, "R1", 0);
+        wire("R1", 1, "R2", 0);
+        wire("R2", 1, "GND1", 0);
+        wire("V1", 1, "GND1", 0);
+
+        interact(() -> lookup(".tab-pane").queryAs(TabPane.class).getSelectionModel().select(2));
+        clickButton("Sync from schematic");
+        settle();
+        assertThat(project().board().placements()).isNotEmpty();
+        clickOn("#pcb-autoroute");
+        settle();
+        assertThat(project().board().traces()).isNotEmpty();
+
+        String ground = netOf("GND1", 0).name();
+        interact(() -> lookup("#pcb-net").queryComboBox().getSelectionModel().select(ground));
+        clickOn("#pcb-pour");
+        settle();
+        assertThat(project().board().zones()).as(() -> lookup(".dialog-pane").tryQuery()
+                .map(n -> ((javafx.scene.control.DialogPane) n).getContentText()).orElse(status()))
+                .singleElement().satisfies(zone -> {
+            assertThat(zone.netId()).isEqualTo(netOf("GND1", 0).id());
+            assertThat(zone.fill()).isNotEmpty();
+        });
+        clickOn("#pcb-delete-all-traces");
+        clickButton("Yes");
+        settle();
+        assertThat(project().board().traces()).isEmpty();
+        push(KeyCode.SHORTCUT, KeyCode.Z);
+        settle();
+        assertThat(project().board().traces()).isNotEmpty();
+
+        Path fab = temp.resolve("fab");
+        WorkbenchApplication.fileDialog = save -> fab.toFile();
+        menuItem("Export fabrication files...");
+        settle();
+        try (var files = Files.list(fab)) {
+            assertThat(files.map(f -> f.getFileName().toString()))
+                    .hasSize(9).anyMatch(n -> n.endsWith(".drl")).anyMatch(n -> n.endsWith("-BOM.csv"));
+        }
+
+        Path spice = temp.resolve("board.cir");
+        WorkbenchApplication.fileDialog = save -> spice.toFile();
+        menuItem("Export SPICE netlist...");
+        settle();
+        assertThat(Files.readString(spice)).contains("R1 ", "R2 ", ".op", ".end");
+
+        interact(() -> lookup(".tab-pane").queryAs(TabPane.class).getSelectionModel().select(3));
+        settle();
+        assertThat(status()).doesNotContainIgnoringCase("error");
+
+        menuItem("Import SPICE netlist...");
+        if (lookup(button("Don't save")).tryQuery().isPresent()) {
+            clickButton("Don't save");
+        }
+        settle();
+        assertThat(project().components()).extracting(ComponentView::reference).contains("R1", "R2", "V1");
+        assertThat(project().nets()).anySatisfy(n -> assertThat(n.name()).isEqualTo("GND"));
+        interact(() -> lookup(".tab-pane").queryAs(TabPane.class).getSelectionModel().select(0));
+    }
+
     // ---- Helpers ----
+
+    private void menuItem(String text) throws Exception {
+        var item = lookup(".menu-bar").queryAs(javafx.scene.control.MenuBar.class).getMenus().stream()
+                .flatMap(m -> m.getItems().stream()).filter(i -> text.equals(i.getText())).findFirst().orElseThrow();
+        // runLater, not interact: the action may open a modal confirmation that the test answers afterwards
+        javafx.application.Platform.runLater(item::fire);
+        WaitForAsyncUtils.waitForFxEvents();
+        WaitForAsyncUtils.sleep(300, TimeUnit.MILLISECONDS);
+    }
 
     private static void settle() throws Exception {
         WaitForAsyncUtils.waitForFxEvents();

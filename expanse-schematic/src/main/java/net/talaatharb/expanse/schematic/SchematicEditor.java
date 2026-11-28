@@ -149,10 +149,7 @@ public final class SchematicEditor {
 
     /** Points traces of {@code merged} nets at the surviving net {@code id}. */
     private static Design.Board retarget(Project project, List<Net> merged, UUID id) {
-        Set<UUID> mergedIds = new HashSet<>(merged.stream().map(Net::id).toList());
-        var traces = project.board().traces().stream().map(t -> mergedIds.contains(t.netId())
-                ? new Trace(t.id(), id, t.layer(), t.widthMm(), t.points()) : t).toList();
-        return project.board().with(project.board().placements(), traces);
+        return project.board().retarget(new HashSet<>(merged.stream().map(Net::id).toList()), id);
     }
 
     public Project disconnect(Project project, UUID pinId) {
@@ -227,8 +224,8 @@ public final class SchematicEditor {
         Set<UUID> netIds = new HashSet<>(nets.stream().map(Net::id).toList());
         var placements = project.board().placements().stream().filter(p -> !unplaced.contains(p.componentId()))
                 .toList();
-        var traces = project.board().traces().stream().filter(t -> netIds.contains(t.netId())).toList();
-        return project.withParts(parts, components, nets, project.board().with(placements, traces));
+        return project.withParts(parts, components, nets,
+                project.board().with(placements, project.board().traces()).onlyNets(netIds));
     }
 
     private static boolean valid(Design.ParameterDefinition parameter, String value) {
@@ -257,8 +254,8 @@ public final class SchematicEditor {
     private static Project withNets(Project project, List<Component> components, List<Net> nets,
                                     List<Design.Placement> placements) {
         Set<UUID> netIds = new HashSet<>(nets.stream().map(Net::id).toList());
-        var traces = project.board().traces().stream().filter(t -> netIds.contains(t.netId())).toList();
-        return project.edited(components, nets, project.board().with(placements, traces));
+        return project.edited(components, nets,
+                project.board().with(placements, project.board().traces()).onlyNets(netIds));
     }
 
     private static Project replace(Project project, UUID componentId,

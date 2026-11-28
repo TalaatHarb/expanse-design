@@ -11,7 +11,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class Design {
-    public static final String SCHEMA_VERSION = "0.4";
+    public static final String SCHEMA_VERSION = "0.5";
     /** Kind of user-defined parts without a simulation model; drawn as a box with pins on both sides. */
     public static final String GENERIC_KIND = "generic";
     /** Project-local part definitions use this ID prefix, so they never collide with built-in definitions. */
@@ -278,8 +278,38 @@ public final class Design {
         }
     }
 
+    /** A plated through-hole connecting the top and bottom copper of one net. */
+    public record Via(UUID id, UUID netId, double xMm, double yMm, double diameterMm, double drillMm) {
+        public static final double DEFAULT_DIAMETER_MM = 0.8;
+        public static final double DEFAULT_DRILL_MM = 0.4;
+
+        public Via {
+            Objects.requireNonNull(id, "Via ID");
+            Objects.requireNonNull(netId, "Via net");
+            require(finite(xMm, yMm) && Math.abs(xMm) <= 10_000 && Math.abs(yMm) <= 10_000,
+                    "Via coordinates must be finite and within ±10 m");
+            require(diameterMm >= 0.2 && diameterMm <= 10, "Via diameter must be between 0.2 and 10 mm");
+            require(drillMm >= 0.1 && drillMm < diameterMm, "Via drill must be at least 0.1 mm and fit inside the via");
+        }
+    }
+
+    /**
+     * A copper pour: a polygon outline on one layer that is filled with the zone's net, keeping {@code clearanceMm}
+     * from copper of other nets. The fill is derived from the board on demand and is not stored.
+     */
+    public record Zone(UUID id, UUID netId, String layer, List<Point> outline, double clearanceMm) {
+        public Zone {
+            Objects.requireNonNull(id, "Zone ID");
+            Objects.requireNonNull(netId, "Zone net");
+            require(LAYERS.contains(layer), "Zone layer must be top or bottom");
+            outline = List.copyOf(outline);
+            require(outline.size() >= 3 && outline.size() <= 1000, "A zone outline requires 3 to 1000 points");
+            require(clearanceMm >= 0.1 && clearanceMm <= 10, "Zone clearance must be between 0.1 and 10 mm");
+        }
+    }
+
     public record Board(double widthMm, double heightMm, double thicknessMm, double clearanceMm,
-                        List<Placement> placements, List<Trace> traces) {
+                        List<Placement> placements, List<Trace> traces, List<Via> vias, List<Zone> zones) {
         public Board {
             require(widthMm > 0 && heightMm > 0 && widthMm <= 2000 && heightMm <= 2000,
                     "Board size must be between 0 and 2000 mm");
@@ -287,15 +317,42 @@ public final class Design {
             require(clearanceMm > 0 && clearanceMm <= 10, "Clearance must be between 0 and 10 mm");
             placements = List.copyOf(placements);
             traces = List.copyOf(traces);
+            vias = List.copyOf(vias);
+            zones = List.copyOf(zones);
             unique(placements.stream().map(Placement::componentId).toList(), "board placement");
         }
 
         public static Board empty() {
-            return new Board(80, 60, 1.6, 0.2, List.of(), List.of());
+            return new Board(80, 60, 1.6, 0.2, List.of(), List.of(), List.of(), List.of());
         }
 
         public Board with(List<Placement> nextPlacements, List<Trace> nextTraces) {
-            return new Board(widthMm, heightMm, thicknessMm, clearanceMm, nextPlacements, nextTraces);
+            return new Board(widthMm, heightMm, thicknessMm, clearanceMm, nextPlacements, nextTraces, vias, zones);
+        }
+
+        public Board withCopper(List<Trace> nextTraces, List<Via> nextVias, List<Zone> nextZones) {
+            return new Board(widthMm, heightMm, thicknessMm, clearanceMm, placements, nextTraces, nextVias, nextZones);
+        }
+
+        public Board resized(double nextWidth, double nextHeight, double nextThickness, double nextClearance) {
+            return new Board(nextWidth, nextHeight, nextThickness, nextClearance, placements, traces, vias, zones);
+        }
+
+        /** Drops copper (traces, vias, zones) of nets that are not in {@code netIds}. */
+        public Board onlyNets(Set<UUID> netIds) {
+            return withCopper(traces.stream().filter(t -> netIds.contains(t.netId())).toList(),
+                    vias.stream().filter(v -> netIds.contains(v.netId())).toList(),
+                    zones.stream().filter(z -> netIds.contains(z.netId())).toList());
+        }
+
+        /** Moves copper of the nets in {@code merged} to the net {@code target}. */
+        public Board retarget(Set<UUID> merged, UUID target) {
+            return withCopper(traces.stream().map(t -> merged.contains(t.netId())
+                            ? new Trace(t.id(), target, t.layer(), t.widthMm(), t.points()) : t).toList(),
+                    vias.stream().map(v -> merged.contains(v.netId())
+                            ? new Via(v.id(), target, v.xMm(), v.yMm(), v.diameterMm(), v.drillMm()) : v).toList(),
+                    zones.stream().map(z -> merged.contains(z.netId())
+                            ? new Zone(z.id(), target, z.layer(), z.outline(), z.clearanceMm()) : z).toList());
         }
     }
 
@@ -380,6 +437,15 @@ public final class Design {
             for (var trace : board.traces()) {
                 require(ids.add(trace.id()), "Duplicate entity ID");
                 require(netIds.contains(trace.netId()), "Trace references a missing net");
+            }
+            for (var via : board.vias()) {
+                require(ids.add(via.id()), "Duplicate entity ID");
+                require(netIds.contains(via.netId()), "Via references a missing net");
+            }
+            require(board.zones().size() <= 100, "A board supports at most 100 zones");
+            for (var zone : board.zones()) {
+                require(ids.add(zone.id()), "Duplicate entity ID");
+                require(netIds.contains(zone.netId()), "Zone references a missing net");
             }
         }
 

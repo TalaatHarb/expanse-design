@@ -27,7 +27,7 @@ class ProjectSessionTest {
     }
 
     private static String document(UUID projectId, long revision) {
-        return "{\"schemaVersion\":\"0.4\",\"id\":\"" + projectId + "\",\"name\":\"Circuit\",\"revision\":" + revision + "}";
+        return "{\"schemaVersion\":\"0.5\",\"id\":\"" + projectId + "\",\"name\":\"Circuit\",\"revision\":" + revision + "}";
     }
 
     private ChangeResult applied(long revision) {

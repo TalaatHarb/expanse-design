@@ -71,8 +71,10 @@ transaction durability; filesystem export additionally uses a sibling temporary
 file, backup, and atomic replacement. Unsupported atomic replacement is reported
 as an error, never silently downgraded.
 
-Flyway migration versions and JSON schema versions are separate. Schema `0.4`
-is current: it adds net labels (on a pin or a free point) to nets; a label name
+Flyway migration versions and JSON schema versions are separate. Schema `0.5`
+is current: it adds vias (position, diameter, drill, net) and copper zones
+(net, layer, outline polygon, clearance) to the board; fills are derived, not
+stored. `0.4` documents migrate by adding empty lists. Schema `0.4` added net labels (on a pin or a free point) to nets; a label name
 is the net's identity for connectivity, so placing a label with an existing
 net's name joins that net. `0.3` documents migrate by adding empty label lists.
 Schema `0.3` added drawn wires on nets (pin or free ends, bend points) and

@@ -10,6 +10,8 @@ import net.talaatharb.expanse.domain.Design.Placement;
 import net.talaatharb.expanse.domain.Design.Point;
 import net.talaatharb.expanse.domain.Design.Project;
 import net.talaatharb.expanse.domain.Design.Trace;
+import net.talaatharb.expanse.domain.Design.Via;
+import net.talaatharb.expanse.domain.Design.Zone;
 import net.talaatharb.expanse.domain.DesignException;
 import net.talaatharb.expanse.pcb.PcbGeometry.PlacedPad;
 import net.talaatharb.expanse.pcb.PcbGeometry.Rect;
@@ -20,8 +22,7 @@ public final class BoardEditor {
 
     public Project setBoard(Project project, double widthMm, double heightMm, double thicknessMm, double clearanceMm) {
         Board board = project.board();
-        return project.withBoard(new Board(widthMm, heightMm, thicknessMm, clearanceMm, board.placements(),
-                board.traces()));
+        return project.withBoard(board.resized(widthMm, heightMm, thicknessMm, clearanceMm));
     }
 
     /** Places every physical component that is not yet on the board on free grid positions. */
@@ -92,6 +93,52 @@ public final class BoardEditor {
             throw new DesignException("TRACE_NOT_FOUND", "Trace not found: " + traceId);
         }
         return project.withBoard(project.board().with(project.board().placements(), traces));
+    }
+
+    public Project addVia(Project project, Via via) {
+        Board board = project.board();
+        var vias = new ArrayList<>(board.vias());
+        vias.add(via);
+        return project.withBoard(board.withCopper(board.traces(), vias, board.zones()));
+    }
+
+    public Project deleteVia(Project project, UUID viaId) {
+        Board board = project.board();
+        var vias = board.vias().stream().filter(v -> !v.id().equals(viaId)).toList();
+        if (vias.size() == board.vias().size()) {
+            throw new DesignException("VIA_NOT_FOUND", "Via not found: " + viaId);
+        }
+        return project.withBoard(board.withCopper(board.traces(), vias, board.zones()));
+    }
+
+    public Project addZone(Project project, Zone zone) {
+        Board board = project.board();
+        var zones = new ArrayList<>(board.zones());
+        zones.add(zone);
+        return project.withBoard(board.withCopper(board.traces(), board.vias(), zones));
+    }
+
+    public Project deleteZone(Project project, UUID zoneId) {
+        Board board = project.board();
+        var zones = board.zones().stream().filter(z -> !z.id().equals(zoneId)).toList();
+        if (zones.size() == board.zones().size()) {
+            throw new DesignException("ZONE_NOT_FOUND", "Zone not found: " + zoneId);
+        }
+        return project.withBoard(board.withCopper(board.traces(), board.vias(), zones));
+    }
+
+    /** Routes the unrouted connections and adds the resulting traces and vias in one edit. */
+    public Routed autoroute(Project project, AutoRouter.Options options) {
+        var result = new AutoRouter().route(project, options);
+        Board board = project.board();
+        var traces = new ArrayList<>(board.traces());
+        traces.addAll(result.traces());
+        var vias = new ArrayList<>(board.vias());
+        vias.addAll(result.vias());
+        return new Routed(project.withBoard(board.withCopper(traces, vias, board.zones())), result);
+    }
+
+    public record Routed(Project project, AutoRouter.Result result) {
     }
 
     private static PlacedPad pad(List<PlacedPad> pads, UUID pinId) {

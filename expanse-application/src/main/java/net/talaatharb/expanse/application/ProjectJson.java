@@ -49,7 +49,9 @@ public final class ProjectJson {
     public static final String LEGACY_VERSION = "0.1";
     public static final String PREVIOUS_VERSION = "0.2";
     public static final String WIRES_VERSION = "0.3";
+    public static final String LABELS_VERSION = "0.4";
     private final Schema legacySchema;
+    private final Schema labelsSchema;
     private final Schema previousSchema;
     private final Schema wiresSchema;
     private final ComponentLibrary library;
@@ -64,6 +66,7 @@ public final class ProjectJson {
         legacySchema = load(LEGACY_VERSION);
         previousSchema = load(PREVIOUS_VERSION);
         wiresSchema = load(WIRES_VERSION);
+        labelsSchema = load(LABELS_VERSION);
     }
 
     private static Schema load(String version) {
@@ -118,6 +121,12 @@ public final class ProjectJson {
                             "Project JSON does not conform to schema 0.3; check required fields, types, IDs and units");
                 }
                 tree = migrateFromWires((ObjectNode) tree);
+            } else if (version.isTextual() && LABELS_VERSION.equals(version.textValue())) {
+                if (!labelsSchema.validate(tree).isEmpty()) {
+                    throw new DesignException("INVALID_DOCUMENT",
+                            "Project JSON does not conform to schema 0.4; check required fields, types, IDs and units");
+                }
+                tree = migrateFromLabels((ObjectNode) tree);
             } else if (version.isTextual() && !Design.SCHEMA_VERSION.equals(version.textValue())) {
                 throw new DesignException("UNSUPPORTED_SCHEMA", "Unsupported project schema: " + version.textValue());
             }
@@ -139,7 +148,7 @@ public final class ProjectJson {
     /**
      * 0.1 documents carried pin-only definition snapshots. Migration substitutes the current built-in definition
      * with the same ID (pins must match), adds default parameter values, rotation 0 and an empty board.
-     * Identity and revision are preserved so a migrated project keeps its history position. Continues to 0.4.
+     * Identity and revision are preserved so a migrated project keeps its history position. Continues to 0.5.
      */
     private JsonNode migrateFromLegacy(ObjectNode tree) {
         tree.put("schemaVersion", Design.SCHEMA_VERSION);
@@ -172,12 +181,21 @@ public final class ProjectJson {
         return migrateFromWires(tree);
     }
 
-    /** 0.3 → 0.4: nets gain (empty) net labels; 0.4 also adds the diode, LED and op-amp kinds. */
+    /** 0.3 → 0.4: nets gain (empty) net labels; 0.4 also adds the diode, LED and op-amp kinds. Continues. */
     private JsonNode migrateFromWires(ObjectNode tree) {
         tree.put("schemaVersion", Design.SCHEMA_VERSION);
         for (JsonNode net : tree.withArray("nets")) {
             ((ObjectNode) net).putArray("labels");
         }
+        return migrateFromLabels(tree);
+    }
+
+    /** 0.4 → 0.5: the board gains (empty) vias and copper zones. */
+    private JsonNode migrateFromLabels(ObjectNode tree) {
+        tree.put("schemaVersion", Design.SCHEMA_VERSION);
+        ObjectNode board = (ObjectNode) tree.get("board");
+        board.putArray("vias");
+        board.putArray("zones");
         return tree;
     }
 
